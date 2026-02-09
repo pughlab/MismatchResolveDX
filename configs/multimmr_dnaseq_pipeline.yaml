@@ -1,0 +1,313 @@
+---
+project_name: PROJECTNAME
+output_dir: /cluster/projects/pughlab/projects/PROJECTNAME/DNASeq/
+sample_type: # optional; can be germline or ctdna
+seq_type: targeted # must be one of exome, targeted, rna or wgs
+seq_center: PMGC
+platform: Illumina
+flowcell_type: patterned # one of random or patterned, depends on the instrument used: https://knowledge.illumina.com/instrumentation/general/instrumentation-general-faq-list/000007786
+hpc_group:
+# reference files
+ref_type: hg38 # one of hg38, hg19, GRCh37 or GRCh38 (minimal testing with GRCh37/8)
+reference: /cluster/tools/data/genomes/human/hg38/iGenomes/Sequence/WholeGenomeFasta/genome.fa
+baits_bed: /cluster/projects/pughlab/references/intervals/MultiMMR_panel/version2/TE/bait_probes_merged_sorted.bed
+targets_bed: /cluster/projects/pughlab/references/intervals/MultiMMR_panel/version2/TE/target_covered_by_probes_sorted.bed
+gnomad: /cluster/projects/pughlab/references/ExAC/af-only-gnomad.hg38.vcf.gz 
+dbsnp: /cluster/projects/pughlab/references/dbSNP/GRCh38/b151/dbSNP_GRCh38p7_b151_common_chr.vcf.gz
+cosmic: /cluster/projects/pughlab/references/COSMIC/GRCh38/v91/CosmicVariants_full_sorted_chr.vcf.gz
+exclude_regions: /cluster/projects/pughlab/references/Delly/excludeTemplates/human.hg38.excl.tsv
+gatk_known_1000g: /cluster/tools/data/genomes/human/hg38/hg38bundle/1000G_phase1.snps.high_confidence.hg38.vcf.gz
+gatk_known_indels: /cluster/tools/data/genomes/human/hg38/hg38bundle/Homo_sapiens_assembly38.known_indels.vcf.gz
+gatk_known_mills: /cluster/tools/data/genomes/human/hg38/hg38bundle/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz
+gatk_hapmap: /cluster/tools/data/genomes/human/hg38/hg38bundle/hapmap_3.3.hg38.vcf.gz
+gatk_omni: /cluster/tools/data/genomes/human/hg38/hg38bundle/1000G_omni2.5.hg38.vcf.gz
+# tool versions
+perl_version: 5.40.0
+fastqc_version: 0.11.5
+trim_galore_version: 0.6.6
+bwa_version: 0.7.15
+samtools_version: 1.20
+picard_version: 2.10.9
+bedtools_version: 2.27.1
+gatk_version: 3.8
+gatk_cnv_version: 4.1.8.1
+somaticsniper_version: bam-somaticsniper/1.0.5.0
+vcftools_version: 0.1.15
+vardict_version: 1.7.0
+delly_version: 0.8.1
+novobreak_version: 1.1
+panelcnmops_version: 1.14.0
+mops_r_version: 4.1.0
+pindel_version: 0.2.5b8
+mavis_version: 2.2.5
+cpsr_version: 0.6.1
+pcgr_version: 0.9.1
+vcf2maf_version: 1.6.17 
+r_version: 4.2.1
+# tool specific parameters
+trim_adapters:
+    run: Y
+    parameters:
+        trim:
+            mem: 1G
+            time: '04:00:00'
+fastqc:
+    run: Y
+    parameters:
+        fastqc:
+            mem: 1G
+            time: '04:00:00'
+bwa:
+    run: Y
+    aligner: bwamem
+    reference: /cluster/projects/pughlab/references/bwa_index/hg38/genome.fa
+    parameters:
+        bwa:
+            mem:
+                normal: 8G
+                tumour: 8G
+            n_cpus:
+                normal: 4
+                tumour: 4
+            time:
+                normal: '04:00:00'
+                tumour: '04:00:00'
+        sort:
+            mem:
+                normal: 4G
+                tumour: 4G
+            time:
+                normal: '04:00:00'
+                tumour: '04:00:00'
+        index:
+            mem:
+                normal: 1G
+                tumour: 1G
+            time:
+                normal: '01:00:00'
+                tumour: '01:00:00'
+        merge:
+            tool: 'picard'
+            mark_dup: Y
+            n_cpus: 1
+            java_mem:
+                normal: 7g
+                tumour: 7g
+            mem:
+                normal: 8G
+                tumour: 8G
+            time:
+                normal: '04:00:00'
+                tumour: '04:00:00'
+gatk:
+    run: Y
+    parameters:
+        target_creator:
+            java_mem: 3g
+            mem: 4G
+            time: '04:00:00'
+        realign:
+            java_mem: 3g
+            mem: 4G
+            time: '04:00:00'
+        bqsr:
+            java_mem: 7g
+            mem: 8G
+            time:
+                normal: '04:00:00'
+                tumour: '04:00:00'
+        recalibrate:
+            java_mem: 11g
+            mem: 12G
+            time:
+                normal: '04:00:00'
+                tumour: '04:00:00'
+bamqc:
+    run: Y
+    parameters:
+        qc:
+            java_mem: 3g
+            mem: 4G
+            time: '04:00:00'
+haplotype_caller:
+    run: Y
+    chromosomes:
+    parameters:
+        haplotype_call:
+            java_mem: 3g
+            mem: 4G
+            time: '04:00:00'
+        combine_gvcfs:
+            java_mem: 1g
+            mem: 2G
+            time: '04:00:00'
+        genotype_gvcfs:
+            java_mem: 1g
+            mem: 2G
+            time: '04:00:00'
+        vqsr:
+            java_mem: 1g
+            mem: 2G
+            time: '04:00:00'
+        apply_vqsr:
+            java_mem: 1g
+            mem: 2G
+            time: '04:00:00'
+        hard_filtering:
+            run: N
+            java_mem: 1g
+            mem: 2G
+            time: '04:00:00' 
+        filter_recalibrated:
+            mem: 2G
+            time: '04:00:00'
+        run_vcf2maf: N
+        cpsr:
+            known_positions: /cluster/projects/pughlab/references/CPSR/PCA_pathVar_integrated_filtered_adjusted_WITH_FANCI_hg38.tsv
+            mem: 2G
+            time: '04:00:00'
+annotate:
+    vep_path: /cluster/projects/pughlab/bin/vep
+    vep_data: /cluster/projects/pughlab/references/VEP_cache/98
+    filter_vcf: /cluster/projects/pughlab/references/VEP_cache/ExAC_nonTCGA.r1.sites.hg19ToHg38.vep.vcf.gz 
+    buffer_size: 500
+    n_cpus: 6
+    mem: 12G
+    time: '04:00:00'
+mutect2:
+    run: Y
+    pon: 
+    chromosomes: chr1,chr2,chr3,chr4,chr5,chr6,chr7,chr8,chr9,chr10,chr11,chr12,chr13,chr14,chr15,chr16,chr17,chr18,chr19,chr20,chr21,chr22,chrX,chrY
+    parameters:
+        mutect:
+            java_mem: 3g
+            mem: 4G
+            time: '5-00:00:00'
+        merge:
+            mem: 1G
+            time: '02:00:00'
+        filter:
+            mem: 1G
+            time: '02:00:00'
+        create_pon:
+            minN: 2
+            java_mem: 3g
+            mem: 4G
+            time: '24:00:00'
+somaticsniper:
+    run: Y
+    pon: 
+    parameters:
+        somaticsniper:
+            mem: 4G
+            time: '24:00:00'
+        pileup:
+            mem: 4G
+            time: '24:00:00'
+        readcount:
+            mem: 1G
+            time: '24:00:00'
+        filter:
+            mem: 1G
+            time: '24:00:00'
+vardict:
+    run: Y
+    pon: 
+    parameters:
+        vardict:
+            mem: 4G
+            java_mem: 3g
+            time: '04:00:00'
+        filter:
+            mem: 1G
+            time: '12:00:00'
+        create_pon:
+            minN: 2
+            java_mem: 3g
+            mem: 4G
+            time: '24:00:00'
+pindel:
+    run: Y
+    chromosomes:
+    parameters:
+        pindel:
+            mem: 6G
+            time: '24:00:00'
+            n_cpu: 4
+        convert:
+            filter_depth: 5
+            mem: 4G
+            time: '04:00:00'
+delly:
+    run: Y
+    parameters:
+        call:
+            mem: 4G
+            time: '04:00:00'
+        genotype:
+            mem: 4G
+            time: '04:00:00'
+        merge:
+            mem: 2G
+            time: '04:00:00'
+        filter:
+            mem: 2G
+            time: '04:00:00'
+novobreak:
+    run: Y
+    chromosomes:
+    parameters:
+        novobreak:
+            mem: 40G
+            time: '04:00:00'
+            n_cpus: 10
+        group_reads:
+            mem: 2G
+            time: '04:00:00'
+        postprocess:
+            mem: 6G
+            time: '04:00:00'
+            n_cpus: 4
+        filter:
+            mem: 1G
+            time: '02:00:00'
+panelcn_mops:
+    run: Y
+    pon: # ignored if create_pon:run:Y
+    parameters:
+        run_cohort: N
+        create_pon:
+            run: Y
+            mem: 4G
+            time: '04:00:00'
+        cn_mops:
+            mem: 2G
+            time: '04:00:00'
+panel_msi:
+    run: Y
+    pon: # required if no matched normals are provided
+    parameters:
+        scan:
+            mem: 1G
+            time: '04:00:00'
+        readcounter:
+            mem: 4G
+            time: '04:00:00'
+        create_pon: 
+            mem: 4G
+            time: '04:00:00'
+        calc_msi: 
+            mem: 4G
+            time: '04:00:00'
+mavis:
+    run: Y
+    mem: 8G 
+    mavis_mem_limit: # in Mb, default is 16000; increase if individual steps are running out of memory
+    mavis_time_limit: # in seconds, default is 57600 ; increase if individual steps are running out of time
+    mavis_max_jobs: # maximum number of jobs to submit at a time; decrease if hitting slurm job cap
+    mavis_annotations: /cluster/projects/pughlab/references/MAVIS_ref/ensembl79_hg38_annotations.json
+    mavis_masking: /cluster/projects/pughlab/references/MAVIS_ref/GRCh38_masking.tab
+    mavis_dgv_anno: /cluster/projects/pughlab/references/MAVIS_ref/dgv_hg38_variants.tab
+    mavis_cytoband: /cluster/projects/pughlab/references/MAVIS_ref/cytoBand.txt
+    mavis_draw_fusions_only: true
+    mavis_aligner: 'bwa mem'
