@@ -571,38 +571,6 @@ sub check_final_status {
 	print "Final accouting job: $args{job_id} finished successfully.";
 	}
 
-# format command to generate PON
-sub generate_pon {
-	my %args = (
-		input		=> undef,
-		output		=> undef,
-		reference	=> undef,
-		java_mem	=> undef,
-		tmp_dir		=> undef,
-		minN		=> 2,
-		out_type	=> 'full',
-		@_
-		);
-
-	my $pon_command = join(' ',
-		'java -Xmx' . $args{java_mem},
-		'-Djava.io.tmpdir=' . $args{tmp_dir},
-		'-jar $gatk_dir/GenomeAnalysisTK.jar -T CombineVariants',
-		'-R', $args{reference},
-		$args{input},
-		'-o', $args{output},
-		'--filteredrecordsmergetype KEEP_IF_ANY_UNFILTERED',
-		'--genotypemergeoption UNSORTED --filteredAreUncalled'
-		);
-
-	if ('trimmed' eq $args{out_type}) {
-		$pon_command .= ' -minimalVCF -suppressCommandLineHeader --excludeNonVariants --sites_only';
-		$pon_command .= " -minN $args{minN}";
-		}
-
-	return($pon_command);
-	}
-
 # find files recursively
 sub _get_files {
 	my ($dirs, $exten) = @_;
