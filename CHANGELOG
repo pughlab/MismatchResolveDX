@@ -1,3 +1,13 @@
+2026-02-20: MismatchResolveDx (version 1.1.0);
+ - haplotypecaller.pl: added compatibility for GATK4
+ - genotype_gvcfs.pl: added compatibility for GATK4
+ - annotate_germline.pl: added compatibility for GATK4
+ - mutect2.pl: added compatibility for GATK4
+ - utilities.pl: added compatibility for GATK4 (vcf2maf command) and removed generate_pon 
+ - somaticsniper.pl: update to vcf2maf command (based on changes for GATK4:compatibility updates)
+ - vardict.pl: update to generate_pon command (based on changes for GATK4:compatibility updates)
+
+
 2026-02-13: MismatchResolveDx (version 1.0.1);
  - panel_msi.pl: fixed an error when creating symlinks to tumour bams + code cleanup
  - collect_panelMSI_output.R: added classification based on pre-determined threshold

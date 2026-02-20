@@ -1,4 +1,4 @@
-# MismatchResolveDx (version 1.0.1)
+# MismatchResolveDx (version 1.1.0)
 
 ## Introduction
 This is a collection of pipelines to be used for processing the MismatchResolveDx (formarly MultiMMR) target panel (including sWGS, targeted DNA-seq and targeted EM-Seq). These pipelines are based on the PughLab Pipeline-Suite (https://github.com/pughlab/pipeline-suite.git).
@@ -34,13 +34,13 @@ Tools required for processing/analysis of targeted DNA-Seq (all versions shown a
 - trim_galore (v0.6.6) for adapter trimming
 - fastqc (v0.11.5) for QC of trimmed fastq files
 - BWA (v0.7.15)for alignment, with picardtools for mark duplicates
-- GATK (v3.8) for indel realignment and base quality score recalibration
+- GATK (v3.8) for indel realignment and base quality score recalibration or GATK (v4+) for base quality score recalibration
 - picardtools (v2.10.9) and GATK (v4.6.0.0) to collect BAM QC metrics
-- HaplotypeCaller/GenotypeGVCFs (GATK v3.8) for germline variant calling
+- HaplotypeCaller/GenotypeGVCFs for germline variant calling
 - CPSR (v0.6.1) and PCGR (v0.9.1), VEP (v98) and vcf2maf (v1.6.17) for variant annotations
-- MuTect2 (GATK v3.8), Pindel (v0.2.5b8), SomaticSniper (v1.0.5.0)/bam-readcount (v0.7.4) and Vardict (java;v1.7.0) for somatic variant calling
+- MuTect2 (GATK v3.8 or 4+), Pindel (v0.2.5b8), SomaticSniper (v1.0.5.0)/bam-readcount (v0.7.4) and Vardict (java;v1.7.0) for somatic variant calling
 - Delly (v0.8.1), novoBreak (v1.1) and Mavis (v2.2.5) for SV detection
-- R packages required for panelCN.mops including panelcn.mops (v1.14.0), CopyNumberPlots (v) and CopyNumberPlots (v1.8.0)
+- R packages required for panelCN.mops including panelcn.mops (v1.14.0) and CopyNumberPlots (v1.8.0)
 
 Tools required for processing/analysis of targeted EM-Seq (all versions shown are those used during pipeline development): 
 - perl (v5.40.0), R (v4.1.0), python3 (v3.10.9)
