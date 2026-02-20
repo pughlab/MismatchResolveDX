@@ -17,7 +17,7 @@ my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
 # define some global variables
-our ($reference, $pon, $intervals_bed) = undef;
+our ($reference, $pon, $intervals_bed, $gatk_version) = undef;
 
 ####################################################################################################
 # version       author		comment
@@ -163,6 +163,47 @@ sub get_filter_command {
 	return($filter_command);
 	}
 
+# format command to create PoN
+sub get_create_pon_command {
+	my %args = (
+		input		=> undef,
+		output		=> undef,
+		minN		=> 2,
+		java_mem	=> undef,
+		tmp_dir		=> undef,
+		@_
+		);
+
+	my $pon_command;
+	if (4 == $gatk_version) {
+
+		$pon_command = join(' ',
+			'bcftools merge',
+			$args{input},
+			'| bcftools view -G -c', $args{minN},
+			'>', $args{output}
+			);
+
+		} else {
+
+		$pon_command = join(' ',
+			'java -Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-jar $gatk_dir/GenomeAnalysisTK.jar -T CombineVariants',
+			'-R', $reference,
+			$args{input},
+			'-o', $args{output},
+			'--filteredrecordsmergetype KEEP_IF_ANY_UNFILTERED',
+			'--genotypemergeoption UNSORTED --filteredAreUncalled',
+			'-minimalVCF -suppressCommandLineHeader --excludeNonVariants --sites_only',
+			'-minN', $args{minN}
+			);
+		}
+
+	return($pon_command);
+	}
+
+
 ### MAIN ###########################################################################################
 sub main {
 	my %args = (
@@ -190,8 +231,11 @@ sub main {
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'vardict');
 	my $date = strftime "%F", localtime;
 
-	if ('wgs' eq $tool_data->{seq_type}) {
-		die('Please use vardict_wgs.pl for WGS data!');
+	$gatk_version = 3;
+	my $needed = version->declare('4')->numify;
+	my $given = version->declare($tool_data->{gatk_version})->numify;
+	if ($given >= $needed) {
+		$gatk_version = 4;
 		}
 
 	# organize output and log directories
@@ -676,7 +720,12 @@ sub main {
 			# for multiple tumours, collect all variants, then subset the normal
 			if (scalar(@tumour_ids) <= 1) {
 
-				push @pon_vcfs, "-V:$patient $germline_vcfs[0]";
+				if (4 == $gatk_version) {
+					push @pon_vcfs, $germline_vcfs[0];
+					} else {
+					push @pon_vcfs, "-V:$patient $germline_vcfs[0]";
+					}
+
 				push @pon_dependencies, $germline_jobs[0];
 
 				} elsif (scalar(@tumour_ids) > 1) {
@@ -693,7 +742,11 @@ sub main {
 					"tabix -p vcf $merged_germline.gz"
 					);
 
-				push @pon_vcfs, "-V:$patient $merged_germline.gz";
+				if (4 == $gatk_version) {
+					push @pon_vcfs, "$merged_germline.gz";
+					} else {
+					push @pon_vcfs, "-V:$patient $merged_germline.gz";
+					}
 
 				if ('Y' eq missing_file($merged_germline . '.md5')) {
 
@@ -785,14 +838,12 @@ sub main {
 		my $final_pon_link = join('/', $output_directory, 'panel_of_normals.vcf');
 
 		# create a trimmed (sites only) output (this is the panel of normals)
-		my $pon_command = generate_pon(
+		my $pon_command = get_create_pon_command(
 			input		=> join(' ', @pon_vcfs),
 			output		=> $pon,
-			reference	=> $reference,
 			java_mem	=> $parameters->{create_pon}->{java_mem},
 			minN		=> $parameters->{create_pon}->{minN},
-			tmp_dir		=> $output_directory,
-			out_type	=> 'trimmed'
+			tmp_dir		=> $output_directory
 			);
 
 		if (-l $final_pon_link) {
@@ -801,13 +852,13 @@ sub main {
 
 		symlink($pon, $final_pon_link);
 
-		$pon_command .= "\nmd5sum $pon > $pon.md5";
+		$pon_command .= "\n\nmd5sum $pon > $pon.md5";
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
 			name	=> 'create_sitesOnly_trimmed_panel_of_normals',
 			cmd	=> $pon_command,
-			modules	=> [$gatk],
+			modules	=> [$gatk, $samtools],
 			dependencies	=> join(':', @pon_dependencies),
 			max_time	=> $parameters->{create_pon}->{time},
 			mem		=> $parameters->{create_pon}->{mem},
