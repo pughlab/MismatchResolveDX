@@ -662,17 +662,6 @@ sub get_vcf2maf_command {
 
 	if (defined($args->{normal_id})) {
 		$maf_command .= " --normal-id $args->{normal_id}";
-
-		if ($args->{input} =~ m/Strelka|VarScan|MuTect2|SomaticSniper/) {
-			$maf_command .= " --vcf-tumor-id TUMOR --vcf-normal-id NORMAL";
-			}
-	} else {
-		if ($args->{input} =~ m/VarScan/) {
-			$maf_command .= " --vcf-tumor-id Sample1";
-		}
-		if ( (defined($args->{tumour_vcf_id})) && ($args->{input} =~ m/MuTect2|Strelka/)) {
-			$maf_command .= " --vcf-tumor-id $args->{tumour_vcf_id}";
-		}
 	}
 
 	return($maf_command);
