@@ -17,7 +17,7 @@ my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
 # define some global variables
-our ($reference, $dbsnp);
+our ($reference, $dbsnp, $gatk_version);
 
 ####################################################################################################
 # version       author		comment
@@ -30,7 +30,7 @@ our ($reference, $dbsnp);
 # 1.6           sprokopec       minor updates for tool config
 
 ### USAGE ##########################################################################################
-# haplotype_caller.pl -t tool.yaml -d data.yaml -o /path/to/output/dir -h slurm -r Y -n Y --rna
+# haplotype_caller.pl -t tool.yaml -d data.yaml -o /path/to/output/dir -h slurm -r Y -n Y
 #
 # where:
 # 	-t (tool.yaml) contains tool versions and parameters, reference information, etc.
@@ -40,7 +40,6 @@ our ($reference, $dbsnp);
 # 	-c indicates hpc driver (ie, slurm)
 # 	--remove indicates that intermediates will be removed
 # 	--dry_run indicates that this is a dry run
-# 	--rna to indicate whether input is RNA (STAR-aligned BAMs)
 
 ### DEFINE SUBROUTINES #############################################################################
 # format command to run GATK HaplotypeCaller
@@ -50,67 +49,52 @@ sub get_haplotype_command {
 		output		=> undef,
 		java_mem	=> undef,
 		tmp_dir		=> undef,
-		data_type	=> undef,
 		intervals	=> undef,
+		n_cpus		=> 2,
 		@_
 		);
 
-	my $gatk_command = join(' ',
-		'java -Xmx' . $args{java_mem},
-		'-Djava.io.tmpdir=' . $args{tmp_dir},
-		'-jar $gatk_dir/GenomeAnalysisTK.jar -T HaplotypeCaller',
-		'-R', $reference,
-		'-I', $args{bam},
-		'-o', $args{output}
-		);
+	my $gatk_command;
 
-	if ('rna' eq $args{data_type}) {
-		$gatk_command .= ' ' . join(' ',
-			'-dontUseSoftClippedBases',
-			'-stand_call_conf 20.0'
+	if (4 == $gatk_version) {
+
+		$gatk_command = join(' ',
+			'gatk',
+			'--java-options "-Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-XX:ParallelGCThreads=2',
+			'-XX:ConcGCThreads=2"',
+			'HaplotypeCaller',
+			'-R', $reference,
+			'-I', $args{bam},
+			'-O', $args{output},
+			'-ERC GVCF',
+			'--standard-min-confidence-threshold-for-calling 30.0',
+			'--dbsnp', $dbsnp,
+			'--interval-padding 100 --interval-set-rule INTERSECTION',
+			'--native-pair-hmm-threads', $args{n_cpus}
 			);
-		} elsif ('dna' eq $args{data_type}) {
-		$gatk_command .= ' ' . join(' ',
+
+		} else {
+
+		$gatk_command = join(' ',
+			'java -Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-jar $gatk_dir/GenomeAnalysisTK.jar -T HaplotypeCaller',
+			'-R', $reference,
+			'-I', $args{bam},
+			'-o', $args{output},
 			'-stand_call_conf 30.0',
 			'--emitRefConfidence GVCF',
 			'-variant_index_type LINEAR -variant_index_parameter 128000',
-			'--dbsnp', $dbsnp
+			'--dbsnp', $dbsnp,
+			'--interval_padding 100 --interval_set_rule INTERSECTION'
 			);
-
-		if (defined($args{intervals})) {
-			$gatk_command .= ' ' . join(' ',
-				'--intervals', $args{intervals},
-				'--interval_padding 100'
-				);
-			}
 		}
 
-	return($gatk_command);
-	}
-
-# format command to run variant filter
-sub get_filter_command {
-	my %args = (
-		input		=> undef,
-		reference	=> undef,
-		output		=> undef,
-		java_mem	=> undef,
-		tmp_dir		=> undef,
-		@_
-		);
-
-	my $gatk_command = join(' ',
-		'java -Xmx' . $args{java_mem},
-		'-Djava.io.tmpdir=' . $args{tmp_dir},
-		'-jar $gatk_dir/GenomeAnalysisTK.jar -T VariantFiltration',
-		'-R', $reference,
-		'-V', $args{input},
-		'-window 35',
-		'-cluster 3',
-		'-filterName FS -filter "FS > 30.0"',
-		'-filterName QD -filter "QD < 2.0"',
-		'-o', $args{output}
-		);
+	if (defined($args{intervals})) {
+		$gatk_command .= " --intervals $args{intervals}";
+		}
 
 	return($gatk_command);
 	}
@@ -125,14 +109,63 @@ sub get_combine_gvcf_command {
 		@_
 		);
 
-	my $gatk_command = join(' ',
-		'java -Xmx' . $args{java_mem},
-		'-Djava.io.tmpdir=' . $args{tmp_dir},
-		'-jar $gatk_dir/GenomeAnalysisTK.jar -T CombineGVCFs',
-		'-R', $reference,
-		 $args{input},
-		'-o', $args{output}
+	my $gatk_command;
+
+	if (4 == $gatk_version) {
+
+		$gatk_command = join(' ',
+			'gatk',
+			'--java-options "-Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-XX:ParallelGCThreads=2',
+			'-XX:ConcGCThreads=2"',
+			'CombineGVCFs',
+			'-R', $reference,
+			$args{input},
+			'-O', $args{output}
+			);
+
+		} else {
+
+		$gatk_command = join(' ',
+			'java -Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-jar $gatk_dir/GenomeAnalysisTK.jar -T CombineGVCFs',
+			'-R', $reference,
+			 $args{input},
+			'-o', $args{output}
+			);
+		}
+
+	return($gatk_command);
+	}
+
+# format command to combine gVCFs
+sub get_genomicsDB_import_command {
+	my %args = (
+		input		=> undef,
+		output		=> undef,
+		intervals	=> undef,
+		java_mem	=> undef,
+		tmp_dir		=> undef,
+		@_
 		);
+
+	my $gatk_command = join(' ',
+		'gatk',
+		'--java-options "-Xmx' . $args{java_mem},
+		'-Djava.io.tmpdir=' . $args{tmp_dir},
+		'-XX:ParallelGCThreads=2',
+		'-XX:ConcGCThreads=2"',
+		'GenomicsDBImport',
+		$args{input},
+		'--genomicsdb-workspace-path', $args{output},
+		'--interval_padding 100 --interval_set_rule INTERSECTION'
+		);
+
+	if (defined($args{intervals})) {
+		$gatk_command .= " --intervals $args{intervals}";
+		}
 
 	return($gatk_command);
 	}
@@ -142,7 +175,6 @@ sub main{
 	my %args = (
 		tool_config		=> undef,
 		data_config		=> undef,
-		data_type		=> undef,
 		output_directory	=> undef,
 		hpc_driver		=> undef,
 		del_intermediates	=> undef,
@@ -153,7 +185,6 @@ sub main{
 
 	my $tool_config = $args{tool_config};
 	my $data_config = $args{data_config};
-	my $data_type	= $args{data_type};
 
 	### PREAMBLE ######################################################################################
 	unless($args{dry_run}) {
@@ -162,11 +193,14 @@ sub main{
 
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
-	my $tool_data = error_checking(
-		tool_data	=> $tool_data_orig,
-		pipeline	=> 'gatk',
-		data_type	=> $data_type
-		);
+	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'gatk');
+
+	$gatk_version = 3;
+	my $needed = version->declare('4')->numify;
+	my $given = version->declare($tool_data->{gatk_version})->numify;
+	if ($given >= $needed) {
+		$gatk_version = 4;
+		}
 
 	# organize output and log directories
 	my $output_directory = $args{output_directory};
@@ -283,7 +317,7 @@ sub main{
 			}
 		}
 
-	my ($run_script, $run_id, $link, $java_check, $cleanup_cmd_dna, $cleanup_cmd_rna);
+	my ($run_script, $run_id, $link, $java_check, $cleanup_cmd);
 	my (@all_jobs, @gvcfs);
 
 	# process each sample in $smp_data
@@ -298,8 +332,7 @@ sub main{
 		unless(-e $tmp_directory) { make_path($tmp_directory); }
 
 		# indicate this should be removed at the end
-		$cleanup_cmd_dna .= "\nrm -rf $tmp_directory";
-		$cleanup_cmd_rna = "rm -rf $tmp_directory";
+		$cleanup_cmd .= "\nrm -rf $tmp_directory";
 
 		my $link_directory = join('/', $patient_directory, 'bam_links');
 		unless(-e $link_directory) { make_path($link_directory); }
@@ -341,9 +374,11 @@ sub main{
 			unless(-e $sample_directory) { make_path($sample_directory); }
 
 			# run HaplotypeCaller
-			my $hc_vcf = join('/', $sample_directory, $sample . '_HaplotypeCaller.vcf');
-			if ('dna' eq $data_type) {
-				$hc_vcf = join('/', $sample_directory, $sample . '_HaplotypeCaller.g.vcf');
+			my $hc_vcf = join('/', $sample_directory, $sample . '_HaplotypeCaller.g.vcf');
+
+			if (4 == $gatk_version) {
+				push @gvcfs, " -V $hc_vcf.gz";
+				} else {
 				push @gvcfs, " -V:$sample $hc_vcf.gz";
 				}
 
@@ -351,9 +386,9 @@ sub main{
 			my $call_variants_cmd = get_haplotype_command(
 				bam		=> $smp_data->{$patient}->{$type}->{$sample},
 				output		=> $hc_vcf,
-				data_type	=> $data_type,
 				intervals	=> $tool_data->{targets_bed},
 				java_mem	=> $parameters->{haplotype_call}->{java_mem},
+				n_cpus		=> $parameters->{haplotype_call}->{n_cpus},
 				tmp_dir		=> $tmp_directory
 				);
 
@@ -386,9 +421,9 @@ sub main{
 				$call_variants_cmd .= "\n\n" . get_haplotype_command(
 					bam		=> $smp_data->{$patient}->{$type}->{$sample},
 					output		=> $split_hc_vcf,
-					data_type	=> $data_type,
 					intervals	=> '$CHROM',
 					java_mem	=> $parameters->{haplotype_call}->{java_mem},
+					n_cpus		=> $parameters->{haplotype_call}->{n_cpus},
 					tmp_dir		=> $tmp_directory
 					);
 
@@ -413,6 +448,7 @@ sub main{
 						modules	=> [$gatk, $samtools],
 						max_time	=> $parameters->{haplotype_call}->{time},
 						mem		=> $parameters->{haplotype_call}->{mem},
+						cpus_per_task	=> $parameters->{haplotype_call}->{n_cpus},
 						hpc_driver	=> $args{hpc_driver},
 						extra_args	=> [$hpc_group, '--array=1-'. scalar(@chroms)]
 						);
@@ -424,6 +460,7 @@ sub main{
 						modules	=> [$gatk, $samtools],
 						max_time	=> $parameters->{haplotype_call}->{time},
 						mem		=> $parameters->{haplotype_call}->{mem},
+						cpus_per_task	=> $parameters->{haplotype_call}->{n_cpus},
 						hpc_driver	=> $args{hpc_driver},
 						extra_args	=> [$hpc_group]
 						);
@@ -503,220 +540,141 @@ sub main{
 					}
 				}
 
-			if ('dna' eq $data_type) { push @final_outputs, $hc_vcf; }
+			push @final_outputs, $hc_vcf;
 
-			# if this is RNA-Seq, run filter + vcf2maf
-			if ('rna' eq $data_type) {
-
-				$cleanup_cmd_rna .= "\nrm $hc_vcf.gz";
-
-				# run filter variants
-				my $filtered_vcf = join('/',
-					$sample_directory,
-					$sample . '_HaplotypeCaller_filtered.vcf'
-					);
-
-				$cleanup_cmd_rna .= "\nrm $filtered_vcf";
-
-				my $filter_cmd = get_filter_command(
-					input		=> "$hc_vcf.gz",
-					output		=> $filtered_vcf,
-					reference	=> $tool_data->{reference},
-					java_mem	=> $parameters->{filter_raw}->{java_mem},
-					tmp_dir		=> $tmp_directory
-					);
-
-				$filter_cmd .= "\nmd5sum $filtered_vcf > $filtered_vcf.md5";
-
-				# check if this should be run
-				if ('Y' eq missing_file($filtered_vcf . '.md5')) {
-
-					# record command (in log directory) and then run job
-					print $log "  >> Submitting job for Variant Filtration...\n";
-
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> 'run_filter_variants_' . $sample,
-						cmd	=> $filter_cmd,
-						modules	=> [$gatk],
-						dependencies	=> $run_id,
-						max_time	=> $parameters->{filter_raw}->{time},
-						mem		=> $parameters->{filter_raw}->{mem},
-						hpc_driver	=> $args{hpc_driver},
-						extra_args	=> [$hpc_group]
-						);
-
-					$run_id = submit_job(
-						jobname		=> 'run_filter_variants_' . $sample,
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
-						);
-
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
-					} else {
-					print $log "  >> Skipping Variant Filtration because this has already been completed!\n";
-					}
-
-				### Run variant annotation (VEP + vcf2maf)
-				my $final_vcf = join('/',
-					$sample_directory,
-					$sample . '_HaplotypeCaller_filtered_annotated.vcf'
-					);
-				my $final_maf = join('/',
-					$sample_directory,
-					$sample . '_HaplotypeCaller_filtered_annotated.maf'
-					);
-
-				# currently assumes that no RNA-Seq was run on normals
-				my $vcf2maf_cmd = get_vcf2maf_command(
-					input		=> $filtered_vcf,
-					tumour_id	=> $sample,
-					reference	=> $tool_data->{reference},
-					ref_type	=> $tool_data->{ref_type},
-					output		=> $final_maf,
-					tmp_dir		=> $sample_directory,
-					parameters	=> $parameters->{annotate}
-					);
-
-				# check if this should be run
-				if ('Y' eq missing_file($final_maf . '.md5')) {
-
-					# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
-					$vcf2maf_cmd .= "\n\n" . join("\n",
-						"if [ -s $final_maf ]; then",
-						"  md5sum $final_maf > $final_maf.md5",
-						"  mv $sample_directory/$sample" . "_HaplotypeCaller_filtered.vep.vcf $final_vcf",
-						"  md5sum $final_vcf > $final_vcf.md5",
-						"  bgzip $final_vcf",
-						"  tabix -p vcf $final_vcf.gz",
-						"else",
-						'  echo "FINAL OUTPUT MAF is missing; not running md5sum/bgzip/tabix..."',
-						"fi"
-						);
-
-					# record command (in log directory) and then run job
-					print $log "  >> Submitting job for vcf2maf...\n";
-
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> 'run_vcf2maf_and_VEP_' . $sample,
-						cmd	=> $vcf2maf_cmd,
-						modules => [$perl, $samtools, $vcf2maf],
-						dependencies	=> $run_id,
-						cpus_per_task	=> $parameters->{annotate}->{n_cpus},
-						max_time	=> $parameters->{annotate}->{time},
-						mem		=> $parameters->{annotate}->{mem},
-						hpc_driver	=> $args{hpc_driver},
-						extra_args	=> [$hpc_group]
-						);
-
-					$run_id = submit_job(
-						jobname		=> 'run_vcf2maf_and_VEP_' . $sample,
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
-						);
-
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
-					} else {
-					print $log "  >> Skipping vcf2maf because this has already been completed!\n";
-					}
-
-				push @final_outputs, $final_maf;
-				}
-			}
-
-		# should intermediate files be removed
-		# run per patient
-		if ( ($args{del_intermediates}) && ('rna' eq $data_type) ) {
-
-			if (scalar(@patient_jobs) == 0) {
-				`rm -rf $tmp_directory`;
-				} else {
-
-				print $log ">> Submitting job to clean up temporary/intermediate files...\n";
-
-				# make sure final output exists before removing intermediate files!
-				my @files_to_check;
-				foreach my $tmp ( @final_outputs ) {
-					push @files_to_check, $tmp . '.md5';
-					}
-
-				$cleanup_cmd_rna = join("\n",
-					"if [ -s " . join(" ] && [ -s ", @files_to_check) . " ]; then",
-					$cleanup_cmd_rna,
-					"else",
-					'echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
-					"fi"
-					);
-
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_cleanup_' . $patient,
-					cmd	=> $cleanup_cmd_rna,
-					dependencies	=> join(':', @patient_jobs),
-					max_time	=> '00:05:00',
-					mem		=> '256M',
-					hpc_driver	=> $args{hpc_driver},
-					kill_on_error	=> 0,
-					extra_args	=> [$hpc_group]
-					);
-
-				$run_id = submit_job(
-					jobname		=> 'run_cleanup_' . $patient,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{hpc_driver},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
-					);
-				}
 			}
 
 		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
 		print $log "---\n";
 		}
 
-	# if this is DNA-Seq (WXS or WGS), combine above gvcfs (per-batch)
-	if ('dna' eq $data_type) {
+	# if this is DNA-Seq (WXS or WGS), combine above gvcfs
+	my @batches = ([]);
+	my $batch_idx = 0;
+	my $file_count = 0;
 
-		my @batches = ([]);
-		my $batch_idx = 0;
-		my $file_count = 0;
+	foreach my $gvcf ( @gvcfs ) {
 
-		foreach my $gvcf ( @gvcfs ) {
+		unless (4 == $gatk_version) {
 
 			if ($file_count > 15) {
 				$batch_idx++;
 				@batches[$batch_idx] = [];
 				$file_count = 0;
 				}
-			push @{$batches[$batch_idx]}, $gvcf;
-
-			$file_count++;
-
 			}
 
-		$batch_idx = 0;
+		push @{$batches[$batch_idx]}, $gvcf;
 
-		my (@combined_gvcfs, @batch_jobs);
+		$file_count++;
 
-		foreach my $batch ( @batches ) {
+		}
 
-			$batch_idx++;
+	$batch_idx = 0;
 
-			# run CombineGVCFs
-			my $combined_gvcf = join('/', $output_directory, 'haplotype_caller_' . $batch_idx . '.g.vcf');
+	my (@combined_gvcfs, @batch_jobs, $genomics_db);
+
+	# make cohort-level temp directory
+	my $tmp_directory = join('/', $output_directory, 'TEMP');
+	unless(-e $tmp_directory) { make_path($tmp_directory); }
+	$cleanup_cmd .= "\nrm -rf $tmp_directory";
+
+	foreach my $batch ( @batches ) {
+
+		$batch_idx++;
+
+		# run CombineGVCFs
+		if (4 == $gatk_version) { 
+
+			my ($combine_cmd, $db_complete);
+			my $genomics_db = join('/', $output_directory, 'genomicsDB');
+
+			# special case if multiple chromosomes and SLURM HPC driver
+			if ( (scalar(@chroms) > 1) && ('slurm' eq $args{hpc_driver}) && ($is_wgs) ) {
+
+				$combine_cmd = 'CHROM=$(sed -n "$SLURM_ARRAY_TASK_ID"p ' . $chr_file . ')';
+				$combine_cmd .= "\necho Running chromosome: " . '$CHROM';
+
+				$combine_cmd .= "\n\n" . get_genomicsDB_import_command(
+					input		=> join(' ', @{$batch}),
+					output		=> $genomics_db,
+					intervals	=> '$CHROM',
+					java_mem	=> $parameters->{combine_gvcfs}->{java_mem},
+					tmp_dir		=> $tmp_directory
+					);
+
+#				$db_complete = join('/', $genomics_db, 'GenomicsDBImport_$CHROM.COMPLETE');
+#				$combine_cmd .= "\n\n echo 'done' > $db_complete";
+#				push @combined_gvcfs, $db_complete;
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_genomics_db_import',
+					cmd	=> $combine_cmd,
+					modules	=> [$gatk],
+					dependencies	=> join(':', @all_jobs),
+					max_time	=> $parameters->{combine_gvcfs}->{time},
+					mem		=> $parameters->{combine_gvcfs}->{mem},
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group, '--array=1-'. scalar(@chroms)]
+					);
+
+				} else {
+
+				$combine_cmd = get_genomicsDB_import_command(
+					input		=> join(' ', @{$batch}),
+					output		=> $genomics_db,
+					intervals	=> $tool_data->{targets_bed},
+					java_mem	=> $parameters->{combine_gvcfs}->{java_mem},
+					tmp_dir		=> $tmp_directory
+					);
+
+				$db_complete = join('/', $genomics_db, 'GenomicsDBImport.COMPLETE');
+				$combine_cmd .= "\n\n echo 'done' > $db_complete";
+				push @combined_gvcfs, $db_complete;
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_genomics_db_import',
+					cmd	=> $combine_cmd,
+					modules	=> [$gatk],
+					dependencies	=> join(':', @all_jobs),
+					max_time	=> $parameters->{combine_gvcfs}->{time},
+					mem		=> $parameters->{combine_gvcfs}->{mem},
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
+					);
+				}
+
+			# check if this should be run
+			if ('Y' eq missing_file($db_complete)) {
+
+				# record command (in log directory) and then run job
+				print $log ">> Submitting job for GenomicsDBImport...\n";
+
+				$run_id = submit_job(
+					jobname		=> 'run_genomics_db_import',
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				push @batch_jobs, $run_id;
+				}
+
+			} else {
+
+			my $combined_gvcf = join('/',
+				$output_directory,
+				'haplotype_caller_' . $batch_idx . '.g.vcf'
+				);
 
 			my $combine_cmd = get_combine_gvcf_command(
 				input		=> join(' ', @{$batch}),
 				output		=> $combined_gvcf,
 				java_mem	=> $parameters->{combine_gvcfs}->{java_mem},
-				tmp_dir		=> $output_directory
+				tmp_dir		=> $tmp_directory
 				);
 
 			# this is a java-based command, so run a final check
@@ -731,6 +689,8 @@ sub main{
 				);
 
 			$combine_cmd .= "\n$java_check";
+
+			push @combined_gvcfs, "$combined_gvcf.gz";
 
 			# check if this should be run
 			if ('Y' eq missing_file($combined_gvcf . '.md5')) {
@@ -760,70 +720,38 @@ sub main{
 
 				push @batch_jobs, $run_id;
 				}
-
-			push @combined_gvcfs, "$combined_gvcf.gz";
-			}
-
-		push @all_jobs, @batch_jobs;
-
-		# should intermediate files be removed
-		if ($args{del_intermediates}) {
-
-			print $log ">> Submitting job to clean up temporary/intermediate files...\n";
-
-			# make sure final output exists before removing intermediate files!
-			$cleanup_cmd_dna = join("\n",
-				"if [ -s " . join(" ] && [ -s ", @combined_gvcfs) . " ]; then",
-				"  $cleanup_cmd_dna",
-				"else",
-				'  echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
-				"fi"
-				);
-
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'run_final_cleanup',
-				cmd	=> $cleanup_cmd_dna,
-				dependencies	=> join(':', @all_jobs),
-				mem		=> '256M',
-				hpc_driver	=> $args{hpc_driver},
-				kill_on_error	=> 0,
-				extra_args	=> [$hpc_group]
-				);
-
-			$run_id = submit_job(
-				jobname		=> 'run_final_cleanup',
-				shell_command	=> $run_script,
-				hpc_driver	=> $args{hpc_driver},
-				dry_run		=> $args{dry_run},
-				log_file	=> $log
-				);
 			}
 		}
 
-	if ( ('rna' eq $data_type) ) {
+	push @all_jobs, @batch_jobs;
 
-		# collect and combine results
-		my $collect_results = join(' ',
-			"Rscript $cwd/collect_snv_output.R",
-			'-d', $output_directory,
-			'-p', $tool_data->{project_name}
+	# should intermediate files be removed
+	if ($args{del_intermediates}) {
+
+		print $log ">> Submitting job to clean up temporary/intermediate files...\n";
+
+		# make sure final output exists before removing intermediate files!
+		$cleanup_cmd = join("\n",
+			"if [ -s " . join(" ] && [ -s ", @combined_gvcfs) . " ]; then",
+			"  $cleanup_cmd",
+			"else",
+			'  echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
+			"fi"
 			);
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
-			name	=> 'combine_and_format_results',
-			cmd	=> $collect_results,
-			modules		=> [$r_version],
+			name	=> 'run_final_cleanup',
+			cmd	=> $cleanup_cmd,
 			dependencies	=> join(':', @all_jobs),
-			max_time	=> $parameters->{combine_results}->{time},
-			mem		=> $parameters->{combine_results}->{mem},
+			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
+			kill_on_error	=> 0,
 			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
-			jobname		=> 'combine_and_format_results',
+			jobname		=> 'run_final_cleanup',
 			shell_command	=> $run_script,
 			hpc_driver	=> $args{hpc_driver},
 			dry_run		=> $args{dry_run},
@@ -884,7 +812,7 @@ sub main{
 # declare variables
 my ($data_config, $tool_config, $output_directory);
 my $hpc_driver = 'slurm';
-my ($remove_junk, $dry_run, $rna, $help, $no_wait);
+my ($remove_junk, $dry_run, $help, $no_wait);
 
 # get command line arguments
 GetOptions(
@@ -895,8 +823,7 @@ GetOptions(
 	'c|cluster=s'	=> \$hpc_driver,
 	'remove'	=> \$remove_junk,
 	'dry-run'	=> \$dry_run,
-	'no-wait'	=> \$no_wait,
-	'rna'		=> \$rna
+	'no-wait'	=> \$no_wait
 	);
 
 if ($help) {
@@ -909,8 +836,7 @@ if ($help) {
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
 		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
-		"\t--no-wait\t<boolean> should we exit after job submission (true) or wait until all jobs have completed (false)? (default: false)",
-		"\t--rna\t<boolean> is the input RNA (STAR-aligned BAMs)? (default: false)"
+		"\t--no-wait\t<boolean> should we exit after job submission (true) or wait until all jobs have completed (false)? (default: false)"
 		);
 
 	print "$help_msg\n";
@@ -922,9 +848,6 @@ if (!defined($tool_config)) { die("No tool config file defined; please provide -
 if (!defined($data_config)) { die("No data config file defined; please provide -d | --data (ie, sample_config.yaml)"); }
 if (!defined($output_directory)) { die("No output directory defined; please provide -o | --out_dir"); }
 
-my $data_type = 'dna';
-if ($rna) { $data_type = 'rna'; }
-
 main(
 	tool_config		=> $tool_config,
 	data_config		=> $data_config,
@@ -932,6 +855,5 @@ main(
 	hpc_driver		=> $hpc_driver,
 	del_intermediates	=> $remove_junk,
 	dry_run			=> $dry_run,
-	no_wait			=> $no_wait,
-	data_type		=> $data_type
+	no_wait			=> $no_wait
 	);
