@@ -728,6 +728,8 @@ sub main {
 				parameters	=> $tool_data->{annotate}
 				);
 
+			$vcf2maf_cmd .= " --vcf-tumor-id TUMOR --vcf-normal-id NORMAL";
+
 			# check if this should be run
 			if ('Y' eq missing_file($final_maf . '.md5')) {
 
