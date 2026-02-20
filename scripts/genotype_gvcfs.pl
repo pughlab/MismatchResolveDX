@@ -18,7 +18,7 @@ require "$cwd/utilities.pl";
 
 # define some global variables
 our ($reference, $ref_type, $known_1000g, $hapmap, $omni, $known_mills, $dbsnp);
-our ($use_new_gatk, $use_new_samtools);
+our ($gatk_version, $use_new_samtools);
 
 ####################################################################################################
 # version	author		comment
@@ -42,8 +42,9 @@ our ($use_new_gatk, $use_new_samtools);
 # format command to run GENOTYPE GVCFs
 sub create_genotype_gvcfs_command {
 	my %args = (
-		input		=> undef,
+		input		=> [],
 		output		=> undef,
+		intervals	=> undef,
 		tmp_dir		=> undef,
 		java_mem	=> undef,
 		@_
@@ -51,22 +52,37 @@ sub create_genotype_gvcfs_command {
 
 	my $gvcf_command;
 
-	if ($use_new_gatk) {
+	if (4 == $gatk_version) {
+
 		$gvcf_command = join(' ',
-			'gatk GenotypeGVCFs',
+			'gatk',
+			'--java-options "-Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-XX:ParallelGCThreads=2',
+			'-XX:ConcGCThreads=2"',
+			'GenotypeGVCFs',
 			'-R', $reference,
-			'-V', $args{input},
-			'--out', $args{output}
+			'-V gendb://' . @{$args{input}}[0],
+			'-O', $args{output},
+#			'--dbsnp', $dbsnp,
+			'--interval-padding 100 --interval-set-rule INTERSECTION',
 			);
+
 		} else {
+
 		$gvcf_command = join(' ',
 			'java -Xmx' . $args{java_mem},
 			'-Djava.io.tmpdir=' . $args{tmp_dir},
 			'-jar $gatk_dir/GenomeAnalysisTK.jar -T GenotypeGVCFs',
 			'-R', $reference,
-			'-V', $args{input},
-			'--out', $args{output}
+			'-V', join(' -V ', @{$args{input}}),
+			'--out', $args{output},
+			'--interval_padding 100 --interval_set_rule INTERSECTION'
 			);
+		}
+
+	if (defined($args{intervals})) {
+		$gvcf_command .= " --intervals $args{intervals}";
 		}
 
 	return($gvcf_command);
@@ -85,15 +101,21 @@ sub create_vqsr_command {
 	
 	my $vqsr_command;
 
-	if ($use_new_gatk) {
+	if (4 == $gatk_version) {
+
 		$vqsr_command = join(' ',
-			'gatk VariantRecalibrator',
+			'gatk',
+			'--java-options "-Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir} . '"',
+			'VariantRecalibrator',
 			'-R', $reference,
-			'-input', $args{input},
-			'-recalFile', $args{output_stem} . '.recal',
-			'-tranchesFile', $args{output_stem} . '.tranches'
+			'-V', $args{input},
+			'-O', $args{output_stem} . '.recal',
+			'--tranches-file', $args{output_stem} . '.tranches'
 			);
+
 		} else {
+
 		$vqsr_command = join(' ',
 			'java -Xmx' . $args{java_mem},
 			'-Djava.io.tmpdir=' . $args{tmp_dir},
@@ -106,11 +128,15 @@ sub create_vqsr_command {
 		}
 
 	if ('INDEL' eq $args{var_type}) {
+
 		$vqsr_command .= ' ' . join(' ',
 			'-resource:mills,known=true,training=true,truth=true,prior=12.0', $known_mills,
 			'-an DP -an FS -an MQRankSum -an ReadPosRankSum -mode INDEL',
-			'-tranche 100.0 -tranche 99.9 -tranche 99.0 -tranche 90.0 --maxGaussians 2'
+			'-tranche 100.0 -tranche 99.9 -tranche 99.0 -tranche 90.0'
 			);
+
+		if (4 == $gatk_version) { $vqsr_command .= " --max-gaussians 2";
+			} else { $vqsr_command .= " --maxGaussians 2"; }		
 
 		} elsif ('SNP' eq $args{var_type}) {
 
@@ -119,8 +145,11 @@ sub create_vqsr_command {
 			'-resource:omni,known=false,training=true,truth=true,prior=12.0', $omni,
 			'-resource:1000G,known=false,training=true,truth=false,prior=10.0', $known_1000g,
 			'-resource:dbsnp,known=true,training=false,truth=false,prior=2.0', $dbsnp,
-			'-an DP -an QD -an FS -an MQ -an MQRankSum -an ReadPosRankSum -mode SNP --maxGaussians 4'
+			'-an DP -an QD -an FS -an MQ -an MQRankSum -an ReadPosRankSum -mode SNP'
 			);
+
+		if (4 == $gatk_version) { $vqsr_command .= " --max-gaussians 4";
+			} else { $vqsr_command .= " --maxGaussians 4"; }		
 		}
 
 	return($vqsr_command);
@@ -140,18 +169,24 @@ sub create_apply_vqsr_command {
 
 	my $recal_command;
 
-	if ($use_new_gatk) {
+	if (4 == $gatk_version) {
+
 		$recal_command = join(' ',
-			'gatk ApplyRecalibration',
+			'gatk',
+			'--java-options "-Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir} . '"',
+			'ApplyVQSR',
 			'-R', $reference,
-			'-input', $args{input},
-			'--ts_filter_level 99',
-			'-recalFile', $args{vqsr_stem} . '.recal',
-			'-tranchesFile', $args{vqsr_stem} . '.tranches',
+			'-V', $args{input},
+			'--truth-sensitivity-filter-level 99',
+			'--recal-file', $args{vqsr_stem} . '.recal',
+			'--tranches-file', $args{vqsr_stem} . '.tranches',
 			'-mode', $args{var_type},
 			'-O', $args{output}
 			);
+
 		} else {
+
 		$recal_command = join(' ',
 			'java -Xmx' . $args{java_mem},
 			'-Djava.io.tmpdir=' . $args{tmp_dir},
@@ -181,9 +216,13 @@ sub create_select_variants_command {
 
 	my $gatk_command;
 
-	if ($use_new_gatk) {
+	if (4 == $gatk_version) {
+
 		$gatk_command = join(' ',
-			'gatk SelectVariants',
+			'gatk',
+			'--java-options "',
+			'-Djava.io.tmpdir=' . $args{tmp_dir} . '"',
+			'SelectVariants',
 			'-R', $reference,
 			'-V', $args{input},
 			'-O', $args{output},
@@ -191,7 +230,9 @@ sub create_select_variants_command {
 			'--exclude-non-variants',
 			'--exclude-filtered'
 			);
+
 		} else {
+
 		$gatk_command = join(' ',
 			'java',
 			'-Djava.io.tmpdir=' . $args{tmp_dir},
@@ -220,14 +261,70 @@ sub get_hard_filter_command {
 
 	my $gatk_command;
 
-	if ($use_new_gatk) {
+	if (4 == $gatk_version) {
+
 		$gatk_command = join(' ',
-			'gatk VariantFiltration',
+			'gatk',
+			'--java-options "-Djava.io.tmpdir=' . $args{tmp_dir} . '"',
+			'SelectVariants',
 			'-R', $reference,
 			'-V', $args{input},
-			'-O', $args{output}
+			'-select-type SNP',
+			'-O', join('/', $args{tmp_dir}, 'combined_genotypes__snps.vcf.gz')
 			);
+
+		$gatk_command .= "\n\n" . join(' ',
+			'gatk',
+			'--java-options "-Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir} . '"',
+			'VariantFiltration',
+			'-R', $reference,
+			'-V', join('/', $args{tmp_dir}, 'combined_genotypes__snps.vcf.gz'),
+			'-O', join('/', $args{tmp_dir}, 'combined_genotypes__snps_filtered.vcf.gz'),
+			'-filter "ReadPosRankSum < -8.0" --filter-name ReadPosRankSum-8',
+			'-filter "MQRankSum < -12.5" --filter-name MQRankSum-12.5',
+			'-filter "MQ < 40.0" --filter-name MQ40',
+			'-filter "SOR > 3.0" --filter-name SOR3',
+			'-filter "FS > 60.0" --filter-name FS60',
+			'-filter "QD < 2.0" --filter-name QD2',
+			'-filter "QUAL < 30.0" --filter-name QUAL30'
+			);
+
+		$gatk_command .= "\n\n" . join(' ',
+			'gatk',
+			'--java-options "-Djava.io.tmpdir=' . $args{tmp_dir} . '"',
+			'SelectVariants',
+			'-R', $reference,
+			'-V', $args{input},
+			'-select-type INDEL',
+			'-select-type MIXED',
+			'-O', join('/', $args{tmp_dir}, 'combined_genotypes__indels.vcf.gz')
+			);
+
+		$gatk_command .= "\n\n" . join(' ',
+			'gatk',
+			'--java-options "-Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir} . '"',
+			'VariantFiltration',
+			'-R', $reference,
+			'-V', join('/', $args{tmp_dir}, 'combined_genotypes__indels.vcf.gz'),
+			'-O', join('/', $args{tmp_dir}, 'combined_genotypes__indels_filtered.vcf.gz'),
+			'-filter "QD < 2.0" --filter-name QD2',
+			'-filter "QUAL < 30.0" --filter-name QUAL30',
+			'-filter "FS > 200.0" --filter-name FS200',
+			'-filter "ReadPosRankSum < -20.0" --filter-name ReadPosRankSum-20'
+			);
+
+		$gatk_command .= "\n\n" . join(' ',
+			'vcf-concat',
+			join('/', $args{tmp_dir}, 'combined_genotypes__snps_filtered.vcf.gz'),
+			join('/', $args{tmp_dir}, 'combined_genotypes__indels_filtered.vcf.gz'),
+			'| vcf-sort -c -t', $args{tmp_dir},
+			'>', $args{output}
+			);
+
 		} else {
+
 		$gatk_command = join(' ',
 			'java -Xmx' . $args{java_mem},
 			'-Djava.io.tmpdir=' . $args{tmp_dir},
@@ -236,17 +333,17 @@ sub get_hard_filter_command {
 			'-V', $args{input},
 			'-o', $args{output}
 			);
-		}
 
-	$gatk_command .= ' ' . join(' ',
-		'-filterName ReadPosRankSum-8 -filter "ReadPosRankSum < -8.0"',
-		'-filterName MQRankSum-12.5 -filter "MQRankSum < -12.5"',
-		'-filterName MQ40 -filter "MQ < 40.0"',
-		'-filterName SOR3 -filter "SOR > 3.0"',
-		'-filterName FS60 -filter "FS > 60.0"',
-		'-filterName QD2 -filter "QD < 2.0"',
-		'-filterName QUAL30 -filter "QUAL < 30.0"'
-		);
+		$gatk_command .= ' ' . join(' ',
+			'-filterName ReadPosRankSum-8 -filter "ReadPosRankSum < -8.0"',
+			'-filterName MQRankSum-12.5 -filter "MQRankSum < -12.5"',
+			'-filterName MQ40 -filter "MQ < 40.0"',
+			'-filterName SOR3 -filter "SOR > 3.0"',
+			'-filterName FS60 -filter "FS > 60.0"',
+			'-filterName QD2 -filter "QD < 2.0"',
+			'-filterName QUAL30 -filter "QUAL < 30.0"'
+			);
+		}
 
 	return($gatk_command);
 	}
@@ -382,11 +479,11 @@ sub main{
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $r_version	= 'R/'. $tool_data->{r_version};
 
-	$use_new_gatk = 0;
-	my $needed = version->declare('4.0')->numify;
+	$gatk_version = 3;
+	my $needed = version->declare('4')->numify;
 	my $given = version->declare($tool_data->{gatk_version})->numify;
 	if ($given >= $needed) {
-		$use_new_gatk = 1;
+		$gatk_version = 4;
 		}
 
 	$use_new_samtools = 0;
@@ -436,18 +533,27 @@ sub main{
 	unless (-e $analysis_directory) { make_path($analysis_directory); }
 
 	# First step, find all of the CombineGVCF files
-	opendir(HC_OUTPUT, $output_directory) or die "Could not open $output_directory";
-	my @combined_gvcfs = grep { /g.vcf.gz$/ } readdir(HC_OUTPUT);
-	@combined_gvcfs = sort @combined_gvcfs;
-	closedir(HC_OUTPUT);
+	my @combined_gvcfs;
+
+	if (4 == $gatk_version) {
+
+		push @combined_gvcfs, join('/', $output_directory, 'genomicsDB');
+
+		} else {
+
+		opendir(HC_OUTPUT, $output_directory) or die "Could not open $output_directory";
+		@combined_gvcfs = grep { /g.vcf.gz$/ } readdir(HC_OUTPUT);
+		@combined_gvcfs = sort @combined_gvcfs;
+		closedir(HC_OUTPUT);
+		}
 
 	my $genotype_run_id = '';
 	my $output_stem = join('/', $cohort_directory, 'haplotype_caller_combined_genotypes');
 	my $combined_gvcf = $output_stem . ".g.vcf";
 
-	my $genotype_cmd = "cd $output_directory\n";
+	my $genotype_cmd = "cd $output_directory\n\n";
 	$genotype_cmd .= create_genotype_gvcfs_command(
-		input		=> join(' -V ', @combined_gvcfs),
+		input		=> \@combined_gvcfs,
 		output		=> $combined_gvcf,
 		tmp_dir		=> $tmp_directory,
 		java_mem	=> $parameters->{genotype_gvcfs}->{java_mem}
