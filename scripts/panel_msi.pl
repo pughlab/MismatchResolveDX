@@ -366,13 +366,14 @@ sub main {
 		my $patient_directory = join('/', $output_directory, $patient);
 		my $link_directory = join('/', $patient_directory, 'bam_links');
 
-		# indicate normal to use
+		# internal tests have suggested the PoN provides a more stringent estimate
+		# than using a matched normal
 		my $normal_rc = $pon;
 		my $normal_job = $pon_run_id;
-		if (scalar(@normal_ids) > 0) {
-			$normal_rc = join('/', $pon_directory, $normal_ids[0] . '_readcounts.tsv');
-			$normal_job = join(':', @{$normal_jobs{$patient}});
-			}
+		#if (scalar(@normal_ids) > 0) {
+		#	$normal_rc = join('/', $pon_directory, $normal_ids[0] . '_readcounts.tsv');
+		#	$normal_job = join(':', @{$normal_jobs{$patient}});
+		#	}
 
 		# for each tumour sample
 		foreach my $sample (@tumour_ids) {
