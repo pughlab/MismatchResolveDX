@@ -243,6 +243,7 @@ print('Formatting germline SNP data...');
 snp.data <- do.call(rbind, lapply(snp.files, read.delim, comment.char = '#'));
 snp.data$t_vaf <- snp.data$t_alt_count / snp.data$t_depth;
 snp.data$n_vaf <- snp.data$n_alt_count / snp.data$n_depth;
+snp.data$BAF <- abs(snp.data$t_vaf - 0.5);
 snp.data$Chromosome <- factor(snp.data$Chromosome, levels = paste0('chr',c(1:22,'X')));
 
 # extract tumour VAFs for heterozygous germline variants
@@ -256,7 +257,7 @@ baf.data <- do.call(rbind, lapply(tumour.smps, function(smp) {
 		tmp.data <- tmp.data[order(tmp.data$Chromosome, tmp.data$Start_Position),]; 
 
 		# run segmentation
-		SNPobj <- DNAcopy::CNA(tmp.data$t_vaf, chrom = tmp.data$Chromosome, maploc = tmp.data$Start_Position,
+		SNPobj <- DNAcopy::CNA(tmp.data$BAF, chrom = tmp.data$Chromosome, maploc = tmp.data$Start_Position,
 			data.type = 'logratio', sampleid = smp, presorted = TRUE);
 
 		output <- DNAcopy::segment(SNPobj)$output;
@@ -418,15 +419,18 @@ for (smp in tumour.smps) {
 			snp.to.plot$n_vaf >= 0.35 & snp.to.plot$n_vaf <= 0.65));
 		smp.data <- merge(
 			smp.data,
-			snp.to.plot[snp.idx,c('Chromosome','Start_Position','t_vaf')], 
+			snp.to.plot[snp.idx,c('Chromosome','Start_Position','BAF')],
 			by.x = c('chromosome','position'),
 			by.y = c('Chromosome','Start_Position'),
 			all.x = TRUE
 			);
-		colnames(smp.data)[which(colnames(smp.data) == 't_vaf')] <- 'BAF';
+#		colnames(smp.data)[which(colnames(smp.data) == 't_vaf')] <- 'BAF';
 		smp.data$b.colour <- 'black';
-		if (any(na.omit(smp.data$BAF) < 0.2 | na.omit(smp.data$BAF) > 0.8)) {
-			smp.data[which(smp.data$BAF < 0.2 | smp.data$BAF > 0.8),]$b.colour <- 'orange'; 
+#		if (any(na.omit(smp.data$BAF) < 0.2 | na.omit(smp.data$BAF) > 0.8)) {
+#			smp.data[which(smp.data$BAF < 0.2 | smp.data$BAF > 0.8),]$b.colour <- 'orange'; 
+#			}
+		if (any(na.omit(smp.data$BAF) > 0.35)) {
+			smp.data[which(smp.data$BAF > 0.35),]$b.colour <- 'orange'; 
 			}
 		}
 
@@ -718,10 +722,10 @@ for (patient in unique(sample.info$Patient)) {
 			alpha = 0.8,
 			cex = 0.8,
 			xlimits = c(0,nrow(template)),
-			ylimits = c(0,1),
+			ylimits = c(0,0.5), #c(0,1),
 			xat = chr.midpoints,
 			xaxis.lab = c(1:20,'21\n','22'),
-			yat = seq(0,1,0.5),
+			yat = seq(0,0.5,0.1), #seq(0,1,0.5),
 			xaxis.tck = c(0.5,0),
 			yaxis.tck = c(0.5,0),
 			xaxis.cex = 1,
