@@ -98,7 +98,13 @@ if (!dir.exists(reports.dir)) {
 	dir.create(reports.dir);
 	}
 
-genes.of.interest <- 'MLH1|MSH2|MSH3|MSH6|PMS2';
+#genes.of.interest <- 'MLH1|MSH2|MSH3|MSH6|PMS2';
+
+# indicate key genes
+classic.genes <- unlist(strsplit('MLH1|MSH2|MSH6|PMS2','\\|'));
+ancillary.genes <- unlist(strsplit('EPCAM|MLH3|POLD1|POLE|MUTYH|TP53|BRAF','\\|'));
+
+genes.of.interest <- paste(c(classic.genes,ancillary.genes), collapse = '|');
 
 ### MAIN ##########################################################################################
 ## read in data files
@@ -128,8 +134,16 @@ smp.names <- sample.info$Sample;
 methylation.data <- read.delim(methyl.file, check.names = FALSE);
 check.samples <- intersect(smp.names, colnames(methylation.data));
 
-gene.data <- methylation.data[grepl(genes.of.interest, methylation.data$V4),];
-rownames(gene.data) <- sapply(gene.data$V4, function(i) { unlist(strsplit(i,'_'))[1] } );
+methylation.data$Gene <- sapply(methylation.data$V4, function(i) { unlist(strsplit(i,'_'))[1] } );
+
+gene.data <- aggregate(
+	methylation.data[,check.samples],
+	by = list(Gene = methylation.data$Gene),
+	FUN = median
+	);
+
+rownames(gene.data) <- gene.data$Gene;
+gene.data <- gene.data[grepl(genes.of.interest, gene.data$Gene),check.samples];
 
 genes.of.interest <- unlist(strsplit(genes.of.interest,'\\|'));
 gene.data <- gene.data[genes.of.interest,];
@@ -158,6 +172,14 @@ if (!is.null(mutation.file)) {
 
 # move to output directory
 setwd(output.dir);
+
+write.table(
+	gene.data,
+	file = generate.filename(arguments$project, 'methylation__gene_data','tsv'),
+	row.names = FALSE,
+	col.names = TRUE,
+	sep = '\t'
+	);
 
 save(
 	sample.info,
@@ -190,7 +212,7 @@ braf.key <- list(
 
 plot.objects <- list();
 
-for (gene in rev(genes.of.interest)) {
+for (gene in rev(classic.genes)) {
 
 	plot.objects[[gene]] <- create.barplot(
 		as.formula(paste(gene, '~ Sample | gene')),
