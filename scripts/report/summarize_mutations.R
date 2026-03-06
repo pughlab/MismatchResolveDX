@@ -107,7 +107,11 @@ if (!dir.exists(reports.dir)) {
 	dir.create(reports.dir);
 	}
 
-genes.of.interest <- 'MLH1|MSH2|MSH3|MSH6|PMS2|APC|POLD1|POLE|MUTYH|TP53|BRAF';
+# indicate key genes
+classic.genes <- unlist(strsplit('MLH1|MSH2|MSH6|PMS2','\\|'));
+ancillary.genes <- unlist(strsplit('EPCAM|MLH3|POLD1|POLE|MUTYH|TP53|BRAF','\\|'));
+
+genes.of.interest <- paste(c(classic.genes, ancillary.genes), collapse = '|');
 
 ### READ DATA ######################################################################################
 # get data
@@ -263,13 +267,15 @@ snp.data$ClinVar <- sapply(snp.data$CLIN_SIG, function(i) {
 		tmp <- unlist(strsplit(i,','));
 		x <- if (any(tmp == 'pathogenic')) { 'pathogenic'
 			} else if (any(tmp == 'likely_pathogenic')) { 'likely_pathogenic'
-			} else if (any(tmp %in% c('uncertain_significance','conflicting_interpretations_of_pathogenicity'))) { 'VUS'
 			} else if (any(tmp == 'likely_benign')) { 'likely_benign'
 			} else if (any(tmp == 'benign')) { 'benign'
+			} else if (any(tmp %in% c('uncertain_significance','conflicting_interpretations_of_pathogenicity'))) { 'VUS'
 			} else { NA }
 		return(x);
 		}
 	});
+
+snp.data <- snp.data[!grepl('benign', snp.data$ClinVar),];
 
 # subset and format mutation data
 keep.fields <- c('Tumor_Sample_Barcode','Hugo_Symbol','Chromosome','Start_Position','End_Position',
