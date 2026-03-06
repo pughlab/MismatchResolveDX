@@ -339,15 +339,19 @@ if (make_pon) {
 		# initiate pdf file
 		pdf(output.file, height = 6, width = 12);
 
-		for (gene in genes.of.interest) {
+		for (gene in c(genes.of.interest,'EPCAM')) {
 
-			region <- paste0(
-				results.table[[1]][which(results.table[[1]]$Gene == gene),]$Chr[1],
-				':',
-				min(results.table[[1]][which(results.table[[1]]$Gene == gene),]$Start) - 1000,
-				'-',
-				max(results.table[[1]][which(results.table[[1]]$Gene == gene),]$End) + 1000
-				);
+			region <- if (gene == 'EPCAM') {
+				'chr2:47368310-47483949';
+				} else {
+				paste0(
+					results.table[[1]][which(results.table[[1]]$Gene == gene),]$Chr[1],
+					':',
+					min(results.table[[1]][which(results.table[[1]]$Gene == gene),]$Start) - 1000,
+					'-',
+					max(results.table[[1]][which(results.table[[1]]$Gene == gene),]$End) + 1000
+					);
+				}
 
 			kp <- plotKaryotype(ref_type, plot.type = 3, labels.plotter = NULL, ideogram.plotter = NULL,
 				cex = 1, zoom = GRanges(region), plot.params = plot.params);
@@ -356,9 +360,13 @@ if (make_pon) {
 			transcript.data <- makeGenesDataFromTxDb.mod(txdb, karyoplot = kp);
 
 			if (length(transcript.data$genes) > 1) {
-				transcript.data <- makeGenesDataFromTxDb.mod(txdb, karyoplot = kp,
-					genes = transcript.data$genes[which(transcript.data$genes$name == gene),]$gene_id
-					);
+				transcript.data <- if (gene == 'EPCAM') {
+					makeGenesDataFromTxDb.mod(txdb, karyoplot = kp, genes = c(4072, 4436));
+					} else {
+					makeGenesDataFromTxDb.mod(txdb, karyoplot = kp,
+						genes = transcript.data$genes[which(transcript.data$genes$name == gene),]$gene_id
+						);
+					}
 				}
 
 			kpPlotGenes(kp, data = transcript.data, data.panel = 2, add.gene.names = FALSE,
