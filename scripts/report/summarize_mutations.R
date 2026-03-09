@@ -72,19 +72,6 @@ parser$add_argument('--msi', type = 'character', help = 'path to MSI estimates')
 
 arguments <- parser$parse_args();
 
-###
-#arguments$project <- 'UHNBB';
-#arguments$output_dir <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/Patient_Reports/Mutations';
-#arguments$report_dir <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/Patient_Reports/Reports';
-#arguments$sample_yaml <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/UHNBB/DynaCare/DNASeq/GATK/gatk_bam_config_2025-08-25_15-25-35.yaml';
-#arguments$mutations <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/Patient_Reports/data/DNASeq/ENSEMBLE/UHNBB_ensemble_mutation_data.tsv';
-#arguments$germline <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/UHNBB/DynaCare/DNASeq/HaplotypeCaller/CPSR/2025-08-27_MultiMMR_mutations_for_cbioportal.tsv';
-#arguments$summary <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/Patient_Reports/SUMMARY/UHNBB_summarized_panel_data.RData';
-#arguments$ichor <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/UHNBB/DynaCare/sWGS/IchorCNA/2026-01-14_MultiMMR_ichorCNA_estimates.tsv';
-#arguments$msi <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/UHNBB/DynaCare/DNASeq/panelMSI/2025-12-16_MultiMMR_panelMSI_estimates.tsv';
-###
-
-
 # load libraries
 library(GenomicRanges);
 library(plyr);
@@ -215,8 +202,8 @@ if (!is.null(sample.data)) {
 
 			loh.data$CN <- sapply(loh.data$LOH.cn, function(i) {
 				ifelse (is.na(i), 'n/a', 
-					ifelse( (i > 0), 'CNgain', 
-						ifelse( (i < 0), 'CNloss', 'CNneutral')))
+					ifelse( (i > 0), 'gain', 
+						ifelse( (i < 0), 'loss', 'neutral')))
 				});
 	
 			# if TF is too low, don't trust LOH classifications
