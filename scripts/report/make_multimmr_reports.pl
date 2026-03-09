@@ -141,6 +141,9 @@ sub main {
 	my $summary_out_directory = join('/', $output_directory, 'SUMMARY');
 	unless(-e $summary_out_directory) { make_path($summary_out_directory); }
 
+	my $cna_out_directory = join('/', $output_directory, 'CNAs');
+	unless(-e $cna_out_directory) { make_path($cna_out_directory); }
+
 	my $dna_out_directory = join('/', $output_directory, 'Mutations');
 	unless(-e $dna_out_directory) { make_path($dna_out_directory); }
 
@@ -285,8 +288,8 @@ sub main {
 		symlink($base_file, $link_file);
 
 		# add ichor file to summary command
-		$summarize_panel_command .= " -i $base_file";
-		$summarize_mutations_command .= " -i $base_file";
+		$summarize_panel_command .= " -i $link_file";
+		$summarize_mutations_command .= " -i $link_file";
 
 		# add ichorCNA segments to summary command
 		$base_file = join('/', $tool_dirs{'swgs_ichor'}, $cn_files[-1]);
@@ -295,7 +298,7 @@ sub main {
 		if ( -l $link_file) { unlink $link_file; }
 		symlink($base_file, $link_file);
 
-		$summarize_panel_command .= " -n $base_file";
+		$summarize_panel_command .= " -n $link_file";
 
 		# create some TF plots
 		my $tf_command = "Rscript $cwd/plot_ichor_estimates.R";
@@ -322,6 +325,44 @@ sub main {
 
 		$run_id = submit_job(
 			jobname		=> 'create_swgs_ichor_plots',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @job_ids, $run_id;
+
+		# create some CNA plots
+		my $cytoband_file = "$cwd/../../data/cytoband_positions__hg38.txt";
+		if (defined($tool_data->{cytoband_file})) {
+			$cytoband_file = $tool_data->{cytoband_file};
+			}
+
+		my $cn_command = "Rscript $cwd/plot_cna_summary.R";
+		$cn_command .= " " . join(' ',
+			'-p', $tool_data->{project_name},
+			'-o', $cna_out_directory,
+			'-s', $wgs_data_config,
+			'-c', join('/', $ichor_dir, $cn_files[-1]),
+			'-t', 'ichor',
+			'-a', $cytoband_file
+			);
+
+		# run command
+		print $log "Submitting job to create sWGS CNA plots...\n";
+		$run_script = write_script(
+			log_dir		=> $log_directory,
+			name		=> 'create_swgs_cna_plots',
+			cmd		=> $cn_command,
+			modules		=> [$r_version],
+			mem		=> '2G',
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'create_swgs_cna_plots',
 			shell_command	=> $run_script,
 			hpc_driver	=> $args{hpc_driver},
 			dry_run		=> $args{dry_run},
@@ -448,7 +489,7 @@ sub main {
 		symlink($base_file, $link_file);
 
 		# add CPSR results to summary command
-		$summarize_mutations_command .= " -g $base_file";
+		$summarize_mutations_command .= " -g $link_file";
 
 		# find DNA-Seq MSI estimates
 		my $msi_dir = join('/', $data_directory, 'DNASeq', 'MSI');
@@ -467,7 +508,8 @@ sub main {
 		symlink($base_file, $link_file);
 
 		# add MSI data to summary command
-		$summarize_mutations_command .= " --msi $base_file";
+		$summarize_mutations_command .= " --msi $link_file";
+
 
 		# find DNA-Seq somatic copy-number calls
 		my $mops_dir = join('/', $data_directory, 'DNASeq', 'CNAs');
@@ -488,7 +530,39 @@ sub main {
 		symlink($base_file, $link_file);
 
 		# add CN data to summary command
-		$summarize_panel_command .= " -c $base_file";
+		$summarize_panel_command .= " -c $link_file";
+
+		my $cn_command = "Rscript $cwd/plot_cna_summary.R";
+		$cn_command .= " " . join(' ',
+			'-p', $tool_data->{project_name},
+			'-o', $cna_out_directory,
+			'-s', $dna_data_config,
+			'-c', join('/', $mops_dir, $cna_files[-1]),
+			'-t', 'mops'
+			);
+
+		# run command
+		print $log "Submitting job to create panelCNA plots...\n";
+		$run_script = write_script(
+			log_dir		=> $log_directory,
+			name		=> 'create_dnaseq_cna_plots',
+			cmd		=> $cn_command,
+			modules		=> [$r_version],
+			mem		=> '2G',
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'create_dnaseq_cna_plots',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @job_ids, $run_id;
+
 
 		# find DNA-Seq SV calls
 		my $sv_dir = join('/', $data_directory, 'DNASeq', 'SVs');
@@ -534,7 +608,7 @@ sub main {
 		if ( -l $link_file) { unlink $link_file; }
 		symlink($base_file, $link_file);
 
-		$ensemble_command .= ' --mutect2 ' . $base_file;
+		$ensemble_command .= ' --mutect2 ' . $link_file;
 
 		# find DNA-Seq somatic mutations (somaticnsiper)
 		$mut_dir = join('/', $data_directory, 'DNASeq', 'SomaticSniper');
@@ -554,7 +628,7 @@ sub main {
 		if ( -l $link_file) { unlink $link_file; }
 		symlink($base_file, $link_file);
 
-		$ensemble_command .= ' --somaticsniper ' . $base_file;
+		$ensemble_command .= ' --somaticsniper ' . $link_file;
 
 		# find DNA-Seq somatic mutations (pindel)
 		$mut_dir = join('/', $data_directory, 'DNASeq', 'Pindel');
@@ -574,7 +648,7 @@ sub main {
 		if ( -l $link_file) { unlink $link_file; }
 		symlink($base_file, $link_file);
 
-		$ensemble_command .= ' --pindel ' . $base_file;
+		$ensemble_command .= ' --pindel ' . $link_file;
 
 		# find DNA-Seq somatic mutations (vardict)
 		$mut_dir = join('/', $data_directory, 'DNASeq', 'VarDict');
@@ -594,7 +668,7 @@ sub main {
 		if ( -l $link_file) { unlink $link_file; }
 		symlink($base_file, $link_file);
 
-		$ensemble_command .= ' --vardict ' . $base_file;
+		$ensemble_command .= ' --vardict ' . $link_file;
 
 
 		# find ENSEMBLE mutations
