@@ -77,20 +77,6 @@ parser$add_argument('-n', '--ichor_cnas', type = 'character', help = 'path to ic
 
 arguments <- parser$parse_args();
 
-###
-#arguments$project <- 'UHNBB';
-#arguments$output_dir <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/Patient_Reports/SUMMARY';
-#arguments$report_dir <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/Patient_Reports/Reports';
-#arguments$ichor <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/UHNBB/DynaCare/sWGS/IchorCNA/2026-01-20_UHNBB_ichorCNA_estimates.tsv'
-#arguments$ichor_cnas <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/UHNBB/DynaCare/sWGS/IchorCNA/2026-01-20_UHNBB_perbin_cna_status.tsv'
-#arguments$sample_yaml <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/UHNBB/DynaCare/DNASeq/GATK/gatk_bam_config_2025-08-25_15-25-35.yaml'
-#arguments$snp_dir <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/UHNBB/DynaCare/DNASeq/HaplotypeCaller/cohort/VCF2MAF';
-#arguments$cnas <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/UHNBB/DynaCare/DNASeq/panelCNmops/2025-10-29_MultiMMR_panelCN.mops_output.tsv'
-#arguments$methylation <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/UHNBB/DynaCare/EMSeq/MethylDackel/2025-10-10_MultiMMR_CpG_methylation_matrix.RData'
-#arguments$somatic <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/Patient_Reports/data/DNASeq/ENSEMBLE/UHNBB_ensemble_mutation_data.tsv'
-###
-
-
 # load libraries
 library(BoutrosLab.plotting.general);
 library(GenomicRanges);
@@ -278,9 +264,9 @@ if (!is.null(mutation.data)) {
 			tmp <- unlist(strsplit(i,','));
 			x <- if (any(tmp == 'pathogenic')) { 'pathogenic'
 				} else if (any(tmp == 'likely_pathogenic')) { 'likely_pathogenic'
-				} else if (any(tmp %in% c('uncertain_significance','conflicting_interpretations_of_pathogenicity'))) { 'VUS'
 				} else if (any(tmp == 'likely_benign')) { 'likely_benign'
 				} else if (any(tmp == 'benign')) { 'benign'
+				} else if (any(tmp %in% c('uncertain_significance','conflicting_interpretations_of_pathogenicity'))) { 'VUS'
 				} else { NA }
 			return(x);
 			}
