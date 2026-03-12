@@ -410,11 +410,7 @@ for (smp in tumour.smps) {
 			by.y = c('Chromosome','Start_Position'),
 			all.x = TRUE
 			);
-#		colnames(smp.data)[which(colnames(smp.data) == 't_vaf')] <- 'BAF';
 		smp.data$b.colour <- 'black';
-#		if (any(na.omit(smp.data$BAF) < 0.2 | na.omit(smp.data$BAF) > 0.8)) {
-#			smp.data[which(smp.data$BAF < 0.2 | smp.data$BAF > 0.8),]$b.colour <- 'orange'; 
-#			}
 		if (any(na.omit(smp.data$BAF) > 0.35)) {
 			smp.data[which(smp.data$BAF > 0.35),]$b.colour <- 'orange'; 
 			}
@@ -443,13 +439,14 @@ for (smp in tumour.smps) {
 		tmp2 <- suppressWarnings(mergeByOverlaps(tmp, segs));
 		df <- data.frame(tmp2$tmp, tmp2$seg.mean);
 
+		tmp3 <- aggregate(tmp2.seg.mean ~ Exon, df, median, na.rm = TRUE);
 		smp.data <- merge(
 			smp.data,
-			df[,c('seqnames','start','tmp2.seg.mean')],
-			by.x = c('chromosome','position'),
-			by.y = c('seqnames','start'),
+			tmp3,
+			by = 'Exon',
 			all.x = TRUE
 			);
+
 		colnames(smp.data)[which(colnames(smp.data) == 'tmp2.seg.mean')] <- 'BAF.Seg';
 		}
 
@@ -510,13 +507,14 @@ for (smp in tumour.smps) {
 		tmp2 <- mergeByOverlaps(tmp, segs);
 		df <- data.frame(tmp2$tmp, tmp2$seg.mean);
 
+		tmp3 <- aggregate(tmp2.seg.mean ~ Exon, df, median, na.rm = TRUE);
 		smp.data <- merge(
 			smp.data,
-			df[,c('seqnames','start','tmp2.seg.mean')],
-			by.x = c('chromosome','position'),
-			by.y = c('seqnames','start'),
+			tmp3,
+			by = 'Exon',
 			all.x = TRUE
 			);
+
 		colnames(smp.data)[which(colnames(smp.data) == 'tmp2.seg.mean')] <- 'CN.Seg';
 		smp.data$s.colour <- cna.colours[match(as.character(round(smp.data$CN.Seg,1)), seq(-1,1,0.1))];
 		if (any(na.omit(smp.data$CN.Seg) < -1)) {
@@ -582,6 +580,28 @@ unlink(link.name);
 file.symlink(
 	generate.filename(arguments$project, 'summarized_panel_data', 'RData'),
 	link.name
+	);
+
+
+# extract and save LOH data
+loh.data <- gene.anno;
+for (smp in tumour.smps) {
+
+	smp.data <- aggregate(BAF.Seg ~ Exon, sample.data[[smp]], min, na.rm = TRUE);
+
+	smp.data[,smp] <- sapply(smp.data$BAF.Seg, function(i) { 
+		ifelse(is.na(i), NA, ifelse(i > 0.3, 'LOH', 'none'))
+		});
+
+	loh.data <- merge(loh.data, smp.data[,c('Exon',smp)], all.x = TRUE);
+	}
+
+write.table(
+	loh.data,
+	file = generate.filename(arguments$project, 'LOH_data', 'tsv'),
+	row.names = FALSE,
+	col.names = TRUE,
+	sep = '\t'
 	);
 
 
