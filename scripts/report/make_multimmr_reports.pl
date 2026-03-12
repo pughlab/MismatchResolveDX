@@ -203,6 +203,12 @@ sub main {
 		'-r', $reports_directory
 		);
 
+	my $summarize_all = join(' ',
+		"Rscript $cwd/summarize_findings.R",
+		'-p', $tool_data->{project_name},
+		'-o', $summary_out_directory
+		);
+
 	# find the required input files for 1XWGS
 	if ($run_wgs) {
 
@@ -290,6 +296,7 @@ sub main {
 		# add ichor file to summary command
 		$summarize_panel_command .= " -i $link_file";
 		$summarize_mutations_command .= " -i $link_file";
+		$summarize_all .= " -i $link_file";
 
 		# add ichorCNA segments to summary command
 		$base_file = join('/', $tool_dirs{'swgs_ichor'}, $cn_files[-1]);
@@ -388,6 +395,7 @@ sub main {
 		# add sample yaml to summary commands
 		$summarize_panel_command .= " -y $dna_data_config";
 		$summarize_mutations_command .= " -y $dna_data_config";
+		$summarize_all .= " -y $dna_data_config";
 
 		# find DNA-Seq QC data
 		my $qc_dir = join('/', $data_directory, 'DNASeq', 'Coverage');
@@ -536,6 +544,7 @@ sub main {
 		$cn_command .= " " . join(' ',
 			'-p', $tool_data->{project_name},
 			'-o', $cna_out_directory,
+			'-r', $reports_directory,
 			'-s', $dna_data_config,
 			'-c', join('/', $mops_dir, $cna_files[-1]),
 			'-t', 'mops'
@@ -836,14 +845,17 @@ sub main {
 	if ($run_dna && $run_em) {
 
 		# add summary data to LOH command
-		my $summary_file = join('/', $summary_out_directory, $tool_data->{project_name} . '_summarized_panel_data.RData');
+		my $summary_file = join('/',
+			$summary_out_directory,
+			$tool_data->{project_name} . '_summarized_panel_data.RData'
+			);
 		$summarize_mutations_command .= " -s $summary_file"; 
 
 		# run command
 		print $log "Submitting job to summarize combined outputs...\n";
 		$run_script = write_script(
 			log_dir		=> $log_directory,
-			name		=> 'summarize_panel_outputs',
+			name		=> 'create_combined_panel_plots',
 			cmd		=> $summarize_panel_command,
 			dependencies	=> $ensemble_run_id,
 			modules		=> [$r_version],
@@ -854,7 +866,7 @@ sub main {
 			);
 
 		$run_id = submit_job(
-			jobname		=> 'summarize_panel_outputs',
+			jobname		=> 'create_combined_panel_plots',
 			shell_command	=> $run_script,
 			hpc_driver	=> $args{hpc_driver},
 			dry_run		=> $args{dry_run},
@@ -869,7 +881,7 @@ sub main {
 	print $log "Submitting job to annotate/filter somatic variants...\n";
 	$run_script = write_script(
 		log_dir		=> $log_directory,
-		name		=> 'summarize_mutation_data',
+		name		=> 'create_dnaseq_mutation_tables',
 		cmd		=> $summarize_mutations_command,
 		modules		=> [$r_version],
 		dependencies	=> join(':', $ensemble_run_id, $run_id),
@@ -880,7 +892,32 @@ sub main {
 		);
 
 	$run_id = submit_job(
-		jobname		=> 'annotate_somatic_variants',
+		jobname		=> 'create_dnaseq_mutation_tables',
+		shell_command	=> $run_script,
+		hpc_driver	=> $args{hpc_driver},
+		dry_run		=> $args{dry_run},
+		log_file	=> $log
+		);
+
+	push @job_ids, $run_id;
+
+
+	# summarize findings (mutation/CN/methylation/LOH) per gene
+	print $log "Submitting job to summarize findings...\n";
+	$run_script = write_script(
+		log_dir		=> $log_directory,
+		name		=> 'summarize_final_results',
+		cmd		=> $summarize_all,
+		dependencies	=> join(':', @job_ids),
+		modules		=> [$r_version],
+		max_time	=> $max_time,
+		mem		=> '4G',
+		hpc_driver	=> $args{hpc_driver},
+		extra_args	=> [$hpc_group]
+		);
+
+	$run_id = submit_job(
+		jobname		=> 'summarize_final_results',
 		shell_command	=> $run_script,
 		hpc_driver	=> $args{hpc_driver},
 		dry_run		=> $args{dry_run},
