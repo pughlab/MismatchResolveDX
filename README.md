@@ -1,4 +1,4 @@
-# MismatchResolveDx (version 1.1.0)
+# MismatchResolveDx (version 1.1.1)
 
 ## Introduction
 This is a collection of pipelines to be used for processing the MismatchResolveDx (formarly MultiMMR) target panel (including sWGS, targeted DNA-seq and targeted EM-Seq). These pipelines are based on the PughLab Pipeline-Suite (https://github.com/pughlab/pipeline-suite.git).
@@ -61,4 +61,4 @@ Other R packages including:
 - for visualizations: BPG (https://CRAN.R-project.org/package=BoutrosLab.plotting.general), UpSetR (https://cran.r-project.org/web/packages/UpSetR/index.html) and RCircos (https://github.com/hzhanghenry/RCircos)
 
 ## Workflow
-See the [wiki](https://github.com/pughlab/pipeline-suite/wiki) for detailed instructions on how to set up a new project and run the pipeline.
+See the [wiki](https://github.com/pughlab/MismatchResolveDX/wiki) for detailed instructions on how to set up a new project and run the pipeline.

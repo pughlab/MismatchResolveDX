@@ -1,3 +1,17 @@
+2026-03-12: MismatchResolveDx (version 1.1.1);
+ - panel_msi.pl: changed to use PoN only for classification
+ - collect_panelMSI_output.R: changed classification threshold to one determined from testing
+ - run_panelCN_mops.R: added EPCAM-MSH2 deletion to plots
+ - plot_methylation.R: added ancillary genes to output table
+ - plot_panel_summary.R: modified BAF for segmentation (distance from 0.5, rather than 0-1);
+ - plot_panel_summary.R: added sample x gene matrix for LOH to output
+ - summarize_mutations.R: added ancillary genes to output tables
+ - plot_cna_summary.R: create cohort-level CNA plots
+ - summarize_findings.R: summarize results (mutations, CNAs, LOH, methylation) for key genes
+ - make_multimmr_reports.pl: added CNA plots and overall results summary
+ - generate_report.pl: added CNA plots
+
+
 2026-02-20: MismatchResolveDx (version 1.1.0);
  - haplotypecaller.pl: added compatibility for GATK4
  - genotype_gvcfs.pl: added compatibility for GATK4
