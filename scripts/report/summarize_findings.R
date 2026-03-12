@@ -44,10 +44,6 @@ parser <- ArgumentParser();
 parser$add_argument('-p', '--project', type = 'character', help = 'PROJECT name');
 parser$add_argument('-o', '--output_dir', type = 'character', help = 'path to output directory');
 parser$add_argument('-y', '--sample_yaml', type = 'character', help = 'path to sample (BAM) yaml');
-parser$add_argument('-c', '--cnas', type = 'character', help = 'path to CNA calls');
-parser$add_argument('-g', '--germline', type = 'character', help = 'path to germline MAF file');
-parser$add_argument('-s', '--somatic', type = 'character', help = 'path to ensemble (somatic) MAF file');
-parser$add_argument('-m', '--methylation', type = 'character', help = 'path to methylation data');
 parser$add_argument('-i', '--ichor', type = 'character', help = 'path to ichorCNA TF estimates');
 
 arguments <- parser$parse_args();
@@ -57,10 +53,6 @@ arguments <- parser$parse_args();
 #arguments$sample_yaml <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/UHNBB/DynaCare/DNASeq/GATK/gatk_bam_config_2026-02-09_14-13-48.yaml'
 #arguments$output_dir <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/Patient_Reports/SUMMARY';
 #arguments$ichor <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/Patient_Reports/data/sWGS/CNAs/2026-02-09_UHNBB_ichorCNA_estimates.tsv'
-#arguments$germline <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/Patient_Reports/data/DNASeq/Germline/2026-02-10_UHNBB_mutations_for_cbioportal.tsv';
-#arguments$somatic <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/Patient_Reports/data/DNASeq/ENSEMBLE/UHNBB_ensemble_mutation_data.tsv';
-#arguments$cnas <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/Patient_Reports/data/DNASeq/CNAs/2026-02-10_UHNBB_panelCN.mops_output.tsv';
-#arguments$methylation <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/Patient_Reports/data/EMSeq/Methylation/2025-10-10_MultiMMR_methylation_per_target_region.tsv'
 ###
 
 
@@ -92,29 +84,53 @@ if (!is.null(arguments$ichor)) {
 	tf.data <- NULL;
 	}
 
-if (!is.null(arguments$germline)) {
-	germline.data <- read.delim(arguments$germline, comment.char = '#');
+# find and read in mutation data
+mutation.files <- list.files(path = '../Mutations', pattern = arguments$project, full.names = TRUE);
+germline.files <- rev(sort(mutation.files[grepl('germline_mutations', mutation.files)]));
+somatic.files <- rev(sort(mutation.files[grepl('somatic_mutations', mutation.files)]));
+
+if (length(germline.files) > 0) {
+	germline.data <- read.delim(germline.files[1]);
 	} else {
 	germline.data <- NULL;
 	}
 
-if (!is.null(arguments$somatic)) {
-	somatic.data <- read.delim(arguments$somatic, comment.char = '#');
+if (length(somatic.files) > 0) {
+	somatic.data <- read.delim(somatic.files[1]);
 	} else {
 	somatic.data <- NULL;
 	}
 
-if (!is.null(arguments$cnas)) {
-	cna.data <- read.delim(arguments$cnas, stringsAsFactors = FALSE);
+# find and read in CNA data
+cna.files <- list.files(path = '../CNAs', pattern = arguments$project, full.names = TRUE);
+mops.files <- rev(sort(cna.files[grepl('mops__gene_data.tsv', cna.files)]));
+
+if (length(mops.files) > 0) {
+	cna.data <- read.delim(mops.files[1], row.names = 1);
 	} else {
 	cna.data <- NULL;
 	}
 
-if (!is.null(arguments$methylation)) {
-	methylation.data <- read.delim(arguments$methylation);
+# find and read in LOH data
+loh.files <- list.files(path = '../SUMMARY', pattern = arguments$project, full.names = TRUE);
+loh.files <- rev(sort(loh.files[grepl('LOH_data.tsv', loh.files)]));
+
+if (length(loh.files) > 0) {
+	loh.data <- read.delim(loh.files[1], check.names = FALSE);
+	} else { 
+	loh.data <- NULL;
+	}
+
+# find and read in Methylation data
+methyl.files <- list.files(path = '../Methylation', pattern = arguments$project, full.names = TRUE);
+gene.files <- rev(sort(methyl.files[grepl('gene_data.tsv', methyl.files)]));
+
+if (length(gene.files) > 0) {
+	methylation.data <- read.delim(gene.files[1]);
 	} else { 
 	methylation.data <- NULL;
 	}
+
 
 # parse sample information from yaml file
 project.yaml <- read_yaml(arguments$sample_yaml);
@@ -140,92 +156,18 @@ sample.info <- sample.info[order(sample.info$Patient, sample.info$Sample),];
 ### FORMAT DATA ####################################################################################
 # format somatic SNV/INDEL data
 if (!is.null(somatic.data)) {
-	somatic.data <- somatic.data[which(somatic.data$Hugo_Symbol %in% genes.of.interest),];
-	somatic.data$VAF <- somatic.data$t_alt_count / somatic.data$t_depth;
-	somatic.data$ClinVar <- sapply(somatic.data$CLIN_SIG, function(i) {
-		if (is.na(i)) { return(NA) 
-			} else {
-			tmp <- unlist(strsplit(i,','));
-			x <- if (any(tmp == 'pathogenic')) { 'pathogenic'
-				} else if (any(tmp == 'likely_pathogenic')) { 'likely_pathogenic'
-				} else if (any(tmp == 'likely_benign')) { 'likely_benign'
-				} else if (any(tmp == 'benign')) { 'benign'
-				} else if (any(tmp %in% c('uncertain_significance','conflicting_interpretations_of_pathogenicity'))) { 'VUS'
-				} else { NA }
-			return(x);
-			}
-		});
+	keep.fields <- c('Sample','Hugo_Symbol','Region','Variant_Classification','HGVSc','HGVSp',
+		'ClinVar','LOH','CN','t_vaf');
 
-	keep.fields <- c('Tumor_Sample_Barcode','Hugo_Symbol','Variant_Classification','HGVSc','HGVSp_Short','ClinVar','VAF');
-
-	somatic.data <- somatic.data[!grepl('benign', somatic.data$ClinVar),keep.fields];
 	somatic.data <- somatic.data[!grepl('Flank|UTR|Intron|Silent', somatic.data$Variant_Classification),];
 	}
 
 if (!is.null(germline.data)) {
-	germline.data <- germline.data[which(germline.data$Hugo_Symbol %in% genes.of.interest),];
-	germline.data$VAF <- germline.data$t_alt_count / germline.data$t_depth;
-	germline.data$ClinVar <- sapply(germline.data$CLIN_SIG, function(i) {
-		if (is.na(i)) { return(NA) 
-			} else {
-			tmp <- unlist(strsplit(i,','));
-			x <- if (any(tmp == 'pathogenic')) { 'pathogenic'
-				} else if (any(tmp == 'likely_pathogenic')) { 'likely_pathogenic'
-				} else if (any(tmp == 'likely_benign')) { 'likely_benign'
-				} else if (any(tmp == 'benign')) { 'benign'
-				} else if (any(tmp %in% c('uncertain_significance','conflicting_interpretations_of_pathogenicity'))) { 'VUS'
-				} else { NA }
-			return(x);
-			}
-		});
-
-	keep.fields <- c('Tumor_Sample_Barcode','Hugo_Symbol','Variant_Classification','HGVSc','HGVSp_Short','ClinVar','VAF');
+	keep.fields <- c('Sample','Hugo_Symbol','Region','Variant_Classification','HGVSc','HGVSp',
+		'ClinVar','LOH','CN','t_vaf');
 
 	germline.data <- germline.data[grepl('pathogenic', germline.data$ClinVar),keep.fields];
 	}
-
-# format CNAs
-# indicate region of EPCAM-MSH2 deletion
-for (smp in unique(cna.data$Sample)) {
-	idx1 <- which(cna.data$Sample == smp & cna.data$Gene == 'EPCAM')[1];
-	idx2 <- which(cna.data$Sample == smp & cna.data$Gene == 'MSH2')[1];
-
-	cna.data[idx1:idx2,]$Gene <- 'EPCAM'
-	}
-
-# exclude 'other' sites (these are generally MSI sites)
-cna.data <- cna.data[!grepl('other', cna.data$Exon),];
-
-# extract genes of interest
-cna.data <- cna.data[which(cna.data$Gene %in% genes.of.interest),];
-cna.data$CN <- as.numeric(gsub('CN','',as.character(cna.data$CN)));
-cna.data[which(cna.data$lowQual == 'lowQual'),]$CN <- NA;
-
-# summarize gene-level CN status using weighted mean
-gene.cnas <- aggregate(
-	CN ~ Sample + Gene,
-	cna.data,
-	mean,
-	na.rm = TRUE
-	);
-
-gene.cnas <- gene.cnas[which(gene.cnas$CN > 2.8 | gene.cnas$CN < 1.7),];
-
-# format methylation
-methyl.samples <- colnames(methylation.data)[7:ncol(methylation.data)];
-methyl.gene.data <- reshape(
-	methylation.data,
-	direction = 'long',
-	varying = list(7:ncol(methylation.data)),
-	timevar = 'Sample',
-	times = methyl.samples,
-	v.names = 'Fraction'
-	);
-
-methyl.gene.data$Gene <- sapply(methyl.gene.data$V4, function(i) { unlist(strsplit(i,'_'))[1] } );
-methyl.gene.data <- methyl.gene.data[which(methyl.gene.data$Gene %in% genes.of.interest),];
-methyl.gene.data$Sample <- gsub('\\.','-',methyl.gene.data$Sample);
-
 
 # initiate data objects
 if (!is.null(arguments$ichor)) {
@@ -245,18 +187,20 @@ if (!is.null(arguments$ichor)) {
 
 	}
 
-
 # add mutations for each gene
 for (gene in genes.of.interest) {
 
 	tmp <- master.matrix;
-	tmp[,c('germline','somatic','methylation','copynumber')] <- NA;
+	tmp[,c('LOH','germline','somatic','methylation','copynumber')] <- NA;
 
-	df1 <- unique(germline.data[which(germline.data$Hugo_Symbol == gene),]$Tumor_Sample_Barcode);
-	df2 <- unique(somatic.data[which(somatic.data$Hugo_Symbol == gene),]$Tumor_Sample_Barcode);
-	df3 <- methyl.gene.data[which(methyl.gene.data$Gene == gene & methyl.gene.data$Fraction > 0.1),]$Sample;
-	df4.up <- gene.cnas[which(gene.cnas$Gene == gene & gene.cnas$CN > 2),]$Sample;
-	df4.dn <- gene.cnas[which(gene.cnas$Gene == gene & gene.cnas$CN < 2),]$Sample;
+	df1 <- unique(germline.data[which(germline.data$Hugo_Symbol == gene),]$Sample);
+	df2 <- unique(somatic.data[which(somatic.data$Hugo_Symbol == gene),]$Sample);
+	df3 <- unique(methylation.data[which(methylation.data[,gene] > 0.1),]$Sample);
+	df4 <- names(which(apply(loh.data[which(loh.data$Gene == gene),6:ncol(loh.data)],2,
+		function(i) { any(na.omit(i) == 'LOH') } )));
+
+	df5.up <- cna.data[which(cna.data[,gene] > 2.8),]$Sample;
+	df5.dn <- cna.data[which(cna.data[,gene] < 1.7),]$Sample;
 
 	if (length(df1) > 0) {
 		tmp[which(tmp$Sample %in% df1),]$germline <- 'germline';
@@ -267,15 +211,18 @@ for (gene in genes.of.interest) {
 	if (length(df3) > 0) {
 		tmp[which(tmp$Sample %in% df3),]$methylation <- 'methylation';
 		}
-	if (length(df4.up) > 0) {
-		tmp[which(tmp$Sample %in% df4.up),]$copynumber <- 'cn.gain';
+	if (length(df4) > 0) {
+		tmp[which(tmp$Sample %in% df4),]$LOH <- 'LOH';
 		}
-	if (length(df4.dn) > 0) {
-		tmp[which(tmp$Sample %in% df4.dn),]$copynumber <- 'cn.loss';
+	if (length(df5.up) > 0) {
+		tmp[which(tmp$Sample %in% df5.up),]$copynumber <- 'cn.gain';
+		}
+	if (length(df5.dn) > 0) {
+		tmp[which(tmp$Sample %in% df5.dn),]$copynumber <- 'cn.loss';
 		}
 
-	tmp[,gene] <- apply(tmp[,c('germline','somatic','methylation','copynumber')],1,function(i) {
-		paste(na.omit(i), collapse = '/') });
+	tmp[,gene] <- apply(tmp[,c('germline','somatic','methylation','copynumber','LOH')],1,
+		function(i) { paste(na.omit(i), collapse = '/') });
 
 	master.matrix <- merge(
 		master.matrix,
