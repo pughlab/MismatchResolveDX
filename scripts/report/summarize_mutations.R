@@ -169,14 +169,8 @@ if (!is.null(sample.data)) {
 			smp.data <- sample.data[[smp]];
 			
 			# are all B-allele frequencies of germline heterozygous SNPs now homozygous?
-			snp.loh <- merge(
-				aggregate(BAF ~ Exon, smp.data, function(i) { all(i > 0.8) | all(i < 0.2) } ),
-				aggregate(BAF ~ Exon, smp.data, function(i) { median(i, na.rm = TRUE) } ),
-				by = 'Exon',
-				all = TRUE
-				);
-
-			snp.loh$LOH.snp <- as.numeric(snp.loh$BAF.x) * sign(snp.loh$BAF.y - 0.5);
+			snp.loh <- aggregate(BAF.Seg ~ Exon, smp.data, function(i) { all(i > 0.3) } );
+			snp.loh$LOH.snp <- snp.loh$BAF.Seg;
 
 			# is the region copy-altered?
 			cn.loh <- merge(
@@ -197,7 +191,7 @@ if (!is.null(sample.data)) {
 				);
 
 			loh.data$LOH <- sapply(loh.data$LOH.snp, function(i) { 
-				ifelse (is.na(i), 'n/a', ifelse( (abs(i) > 0), 'Yes', 'No'))
+				ifelse (is.na(i), 'n/a', ifelse(i, 'Yes', 'No'))
 				});
 
 			loh.data$CN <- sapply(loh.data$LOH.cn, function(i) {
@@ -212,7 +206,9 @@ if (!is.null(sample.data)) {
 				}
 
 			# if this is a tumour-only case (no matched normal), don't trust LOH classifications
-			if (!any('normal' %in% sample.info[which(sample.info$Sample == smp),]$Type)) {
+			patient <- sample.info[which(sample.info$Sample == smp),]$Patient;
+			has.types <- unique(sample.info[which(sample.info$Patient == patient),]$Type);
+			if (!any('normal' %in% has.types)) {
 				loh.data$LOH <- 'n/a';
 				}
 
@@ -353,11 +349,6 @@ msi.data <- merge(
 	all = TRUE
 	);
 
-msi.data$Status <- 'MSS';
-if (any(msi.data$Proportion > 0.1)) {
-	msi.data[which(msi.data$Proportion > 0.1),]$Status <- 'MSI';
-	}
-
 
 ### PER-SAMPLE SUMMARIES ###########################################################################
 setwd(reports.dir);
@@ -491,7 +482,7 @@ for (patient in unique(sample.info$Patient)) {
 	write("\\subsection{MSI Status}\n", file = tex.file, append = TRUE);
 
 	smp.msi <- msi.data[which(msi.data$Patient == patient),];
-	caption <- if (nrow(smp.msi) > 0) { 'MSI status is based on proportion of target MS regions with reduced mononucleotide repeat count (compared to matched normal or panel of normals; proportion $\\geq$ 10\\%) is deemed unstable).'
+	caption <- if (nrow(smp.msi) > 0) { 'MSI status is based on proportion of target MS regions with reduced mononucleotide repeat count (compared to a panel of normals; proportion $\\geq$ 25\\%) is deemed unstable).'
 		} else { 'MSI Status was not evaluated.'; }
 
 	if (nrow(smp.msi) > 0) {
