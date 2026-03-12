@@ -125,6 +125,13 @@ EOI
 		print $report_file "\\input{mutation_results.tex}\n";
 		}
 
+	# add in copy number data
+	if (any { /panel_cna_results.tex/ } @filtered_files) {
+		print $report_file "\\input{panel_cna_results.tex}\n";
+		}
+
+	print $report_file "\\pagebreak\n";
+
 	# add in methylation summary
 	if (any { /methylation_estimates_EMSeq.tex/ } @filtered_files) {
 		print $report_file "\\input{methylation_estimates_EMSeq.tex}\n";
