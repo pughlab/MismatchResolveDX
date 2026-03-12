@@ -106,7 +106,7 @@ cna.files <- list.files(path = '../CNAs', pattern = arguments$project, full.name
 mops.files <- rev(sort(cna.files[grepl('mops__gene_data.tsv', cna.files)]));
 
 if (length(mops.files) > 0) {
-	cna.data <- read.delim(mops.files[1], row.names = 1);
+	cna.data <- read.delim(mops.files[1]);
 	} else {
 	cna.data <- NULL;
 	}

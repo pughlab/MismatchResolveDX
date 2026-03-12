@@ -90,8 +90,10 @@ if (!dir.exists(output.dir)) {
 	dir.create(output.dir);
 	}
 
-if (!dir.exists(reports.dir)) {
-	dir.create(reports.dir);
+if (!is.null(reports.dir)) {
+	if (!dir.exists(reports.dir)) {
+		dir.create(reports.dir);
+		}
 	}
 
 # indicate key genes
