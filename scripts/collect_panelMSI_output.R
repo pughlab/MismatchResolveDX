@@ -84,8 +84,11 @@ summarized.results <- data.frame(
 	Status = NA
 	);
 
+
+# apply pre-determined threshold
+# this was calculated by comparing each 'normal' sample to other normal samples + some buffer
 summarized.results$Status <- sapply(summarized.results$Proportion, function(i) { 
-	ifelse (is.na(i), NA, ifelse(i < 0.2, 'MSS', 'MSI'));
+	ifelse (is.na(i), NA, ifelse(i < 0.25, 'MSS', 'MSI'));
 	});
 
 # save combined/formatted data to file
