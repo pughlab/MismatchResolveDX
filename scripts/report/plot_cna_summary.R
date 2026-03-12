@@ -79,6 +79,20 @@ arguments <- parser$parse_args();
 library(BoutrosLab.plotting.general);
 library(GenomicRanges);
 library(yaml);
+library(xtable);
+
+# get input files
+output.dir <- arguments$output_dir;
+reports.dir <- arguments$report_dir;
+
+# create (if necessary) and move to output directory
+if (!dir.exists(output.dir)) {
+	dir.create(output.dir);
+	}
+
+if (!dir.exists(reports.dir)) {
+	dir.create(reports.dir);
+	}
 
 # indicate key genes
 classic.genes <- unlist(strsplit('MLH1|MSH2|MSH6|PMS2','\\|'));
@@ -137,7 +151,7 @@ if (!dir.exists(arguments$output_dir)) {
 	dir.create(arguments$output_dir);
 	}
 
-setwd(arguments$output_dir);
+setwd(output.dir);
 
 ### FORMAT DATA ####################################################################################
 # makes sure input.data is formatted
@@ -207,16 +221,31 @@ if (grepl('ichor', tolower(arguments$type))) {
 	input.data$CN <- as.numeric(gsub('CN','', input.data$CN));
 	input.data$LRR <- log2(input.data$RC.norm / input.data$medRC.norm);
 
-	# indicate region of EPCAM-MSH2 deletion
-	for (smp in unique(input.data$Sample)) {
-		idx1 <- which(input.data$Sample == smp & input.data$Gene == 'EPCAM')[1];
-		idx2 <- which(input.data$Sample == smp & input.data$Gene == 'MSH2')[1];
-
-		input.data[idx1:idx2,]$Gene <- 'EPCAM';
-		}
-
 	# exclude 'other' sites (these are generally MSI sites)
 	input.data <- input.data[!grepl('other', input.data$Exon),];
+
+	# summarize gene-level CN status using weighted mean
+	gene.cnas <- aggregate(
+		CN ~ Sample + Gene,
+		input.data,
+		mean,
+		na.rm = TRUE
+		);
+
+	gene.data <- reshape(
+		gene.cnas[which(gene.cnas$Gene %in% genes.of.interest),],
+		direction = 'wide',
+		idvar = 'Sample',
+		timevar = 'Gene'
+		);
+	colnames(gene.data) <- gsub('CN.','', colnames(gene.data));
+
+	# indicate region of EPCAM-MSH2 deletion
+	#for (smp in unique(input.data$Sample)) {
+	#	idx1 <- which(input.data$Sample == smp & input.data$Gene == 'EPCAM')[1];
+	#	idx2 <- which(input.data$Sample == smp & input.data$Gene == 'MSH2')[1];
+	#	input.data[idx1:idx2,]$Gene <- 'EPCAM';
+	#	}
 
 	# reshape to region x sample matix
 	cna.data <- reshape(
@@ -238,22 +267,6 @@ if (grepl('ichor', tolower(arguments$type))) {
 	colnames(anno.data)[which(colnames(anno.data) == 'Chr')] <- 'chrom';
 	plot.data <- cna.data[order(cna.data$Chr, cna.data$Start),6:ncol(cna.data)];
 
-	# summarize gene-level CN status using weighted mean
-	gene.cnas <- aggregate(
-		CN ~ Sample + Gene,
-		input.data,
-		mean,
-		na.rm = TRUE
-		);
-
-	gene.data <- reshape(
-		gene.cnas[which(gene.cnas$Gene %in% genes.of.interest),],
-		direction = 'wide',
-		idvar = 'Sample',
-		timevar = 'Gene'
-		);
-	colnames(gene.data) <- gsub('CN.','', colnames(gene.data));
-
 	}
 
 # check for missing samples
@@ -268,10 +281,6 @@ if (length(all.samples) == 1) {
 	} else {
 	plot.data <- plot.data[,all.samples];
 	}
-
-# remove bins with 0 data
-#na.counts <- apply(cna.data,1,function(i) { length(i[!is.na(i)]); });
-#cna.data <- cna.data[which(na.counts > 0),]
 
 ### PLOT DATA ######################################################################################
 # grab some parameters
@@ -365,9 +374,103 @@ write.table(
 	sep = '\t'
 	);
 
-### SAVE SESSION INFO ##############################################################################
 if (tolower(arguments$type) == 'ichor') {
 	save.session.profile(generate.filename('IchorCNA','SessionProfile','txt'));
-	} else {
-	save.session.profile(generate.filename('panelCNmops','SessionProfile','txt'));
+	q();
 	}
+
+gene.data <- merge(
+	sample.info,
+	gene.data,
+	by = 'Sample'
+	);
+
+### PER-SAMPLE SUMMARIES ###########################################################################
+setwd(reports.dir);
+
+# initiate report object
+tex.file <- 'panel_cna_results.tex';
+
+for (patient in unique(sample.info$Patient)) {
+
+	if (!dir.exists(patient)) {
+		dir.create(patient);
+		}
+
+	setwd(patient);
+
+	# add CNA data to tex file
+	write("\\section{Copy-Number Alterations}\n", file = tex.file);
+
+	smp.data <- gene.data[which(gene.data$Patient == patient),];
+	rownames(smp.data) <- smp.data$Sample;
+
+	# apply thresholds
+	to.write <- t(smp.data[,genes.of.interest]);
+	for (smp in colnames(to.write)) {
+		to.write[,smp] <- sapply(to.write[,smp], function(i) {
+			ifelse(is.na(i), NA, ifelse(i <= 1.6, '-1', ifelse(i >= 2.8, '+1', 0))) } );
+		}
+
+	caption <- if (nrow(smp.data) > 0) {
+		'CN status of MMR-related genes (-1 = deletion; 0 = neutral; +1 = gain).';
+		} else { 'Copy-number was not evaluated.'; }
+
+	if (nrow(smp.data) > 0) {
+
+		print(
+			xtable(
+				to.write,
+				caption = caption,
+				digits = 1
+				),
+			file = tex.file,
+			append = TRUE,
+			include.rownames = TRUE,
+			latex.environments = ""
+			);
+
+		} else {
+
+		write(paste0(caption, "\n"), file = tex.file, append = TRUE);
+
+		}
+
+	mops.plots <- list.files(
+		path = file.path(dirname(arguments$sample_yaml), '../panelCNmops', patient),
+		pattern = 'per-gene_plots.pdf', recursive = TRUE, full.names = TRUE)
+
+	for (plot in mops.plots) {
+
+		# run unlink, in case it exists from a previous run
+		smp <- unlist(strsplit(basename(plot),'_'))[1];
+		link.name <- paste0(smp, '_panelCNmops__MMRgenes.pdf');
+		unlink(link.name);
+
+		file.symlink(
+			plot,
+			link.name
+			);
+
+		write(paste0("\n\\subsubsection{", smp, "}\n"), file = tex.file, append = TRUE);
+		write("\\begin{figure}[h!]", file = tex.file, append = TRUE);
+		write("\\begin{center}", file = tex.file, append = TRUE);
+		write(paste0(
+			"\\includegraphics[page=14,width=0.8\\textwidth]{",
+			link.name, '}'
+			), file = tex.file, append = TRUE);
+		write("\\end{center}", file = tex.file, append = TRUE);
+		write(paste0(
+			"\\caption{CN profile for region between EPCAM and MSH2 genes.}"
+			), file = tex.file, append = TRUE);
+		write("\\end{figure}\n", file = tex.file, append = TRUE);
+
+		}
+
+	setwd(reports.dir);
+	}
+
+
+### SAVE SESSION INFO ##############################################################################
+setwd(output.dir);
+save.session.profile(generate.filename('panelCNmops','SessionProfile','txt'));
