@@ -917,6 +917,7 @@ for (patient in unique(sample.info$Patient)) {
 			);
 
 		# add data to tex file
+		write(paste0("\n\\subsubsection{", smp, "}\n"), file = tex.file, append = TRUE);
 		write("\\begin{figure}[h!]", file = tex.file, append = TRUE);
 		write("\\begin{center}", file = tex.file, append = TRUE);
 		write(paste0(
