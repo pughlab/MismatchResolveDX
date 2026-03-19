@@ -1,3 +1,7 @@
+2026-03-20: MismatchResolveDx (version 1.1.2);
+ - plot_panel_summary.R: added sample ID has section header for reports
+
+
 2026-03-12: MismatchResolveDx (version 1.1.1);
  - panel_msi.pl: changed to use PoN only for classification
  - collect_panelMSI_output.R: changed classification threshold to one determined from testing
