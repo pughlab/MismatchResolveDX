@@ -1,4 +1,4 @@
-# MismatchResolveDx (version 1.1.2)
+# MismatchResolveDx (version 1.1.3)
 
 ## Introduction
 This is a collection of pipelines to be used for processing the MismatchResolveDx (formarly MultiMMR) target panel (including sWGS, targeted DNA-seq and targeted EM-Seq). These pipelines are based on the PughLab Pipeline-Suite (https://github.com/pughlab/pipeline-suite.git).
